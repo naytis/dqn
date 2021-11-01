@@ -1,5 +1,8 @@
 import enum
+import os
+import re
 from collections import OrderedDict
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -23,13 +26,11 @@ class DeepQNetwork:
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Running model on device {self.device}")
 
-        # store hyper params
         self.config = config
         self.env = env
         self.timer = timer
 
-        # build model
-        self.build()
+        self.build_model()
 
     def initialize_models(self):
         state_shape = list(self.env.observation_space.shape)
@@ -157,17 +158,42 @@ class DeepQNetwork:
 
         return state
 
-    def build(self):
+    def build_model(self) -> None:
         self.initialize_models()
-        print("Initializing parameters randomly")
 
-        def init_weights(m):
-            if hasattr(m, "weight"):
-                nn.init.xavier_uniform_(m.weight, gain=2 ** (1.0 / 2))
-            if hasattr(m, "bias"):
-                nn.init.zeros_(m.bias)
+        if os.path.exists(self.config.weights_path) and os.listdir(
+            self.config.weights_path
+        ):
+            weights_files = os.listdir(self.config.weights_path)
 
-        self.q_network.apply(init_weights)
+            def extract_step_number(f):
+                step_number = re.findall("\d+$", f)
+                return int(step_number[0]) if step_number else -1, f
+
+            last_weights_file = max(weights_files, key=extract_step_number)
+            weights_file_path = self.config.weights_path + last_weights_file
+            self.starting_step = int(weights_file_path[len(self.config.model_output) :])
+
+            print("Loading parameters from file:", weights_file_path)
+            weights_file_path = Path(weights_file_path)
+            assert (
+                weights_file_path.is_file()
+            ), f"Provided weights file ({weights_file_path}) does not exist"
+            self.q_network.load_state_dict(
+                torch.load(weights_file_path, map_location="cpu")
+            )
+            print("Load successful!")
+        else:
+            print("Initializing parameters randomly")
+
+            def init_weights(m):
+                if hasattr(m, "weight"):
+                    nn.init.xavier_uniform_(m.weight, gain=2 ** (1.0 / 2))
+                if hasattr(m, "bias"):
+                    nn.init.zeros_(m.bias)
+
+            self.q_network.apply(init_weights)
+
         self.q_network = self.q_network.to(self.device)
         self.target_network = self.target_network.to(self.device)
         self.optimizer = optim.Adam(self.q_network.parameters())
@@ -191,8 +217,6 @@ class DeepQNetwork:
 
     def get_action(self, state):
         """
-        Returns action with some epsilon strategy
-
         Args:
             state: observation from gym
         """
@@ -216,13 +240,6 @@ class DeepQNetwork:
             self.config.batch_size
         )
         self.timer.end("update_step/replay_buffer.sample")
-
-        assert (
-            self.q_network is not None and self.target_network is not None
-        ), "WARNING: Networks not initialized. Check initialize_models"
-        assert (
-            self.optimizer is not None
-        ), "WARNING: Optimizer not initialized. Check add_optimizer"
 
         # Convert to Tensor and move to correct device
         self.timer.start("update_step/converting_tensors")

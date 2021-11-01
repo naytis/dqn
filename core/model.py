@@ -212,7 +212,7 @@ class Model:
 
         # last words
         self.logger.info("- Training done.")
-        self.save_parameters()
+        self.save_parameters(self.config.nsteps_train)
         scores_eval += [self.evaluate()]
         export_plot(scores_eval, "Scores", self.config.plot_output)
 
@@ -230,7 +230,7 @@ class Model:
         # perform training step
         if t > self.config.learning_start and t % self.config.learning_freq == 0:
             self.timer.start("train_step/update_step")
-            loss_eval, grad_eval = self.dqn.update_step(t, replay_buffer, lr)
+            loss_eval, grad_eval = self.dqn.update_step(replay_buffer, lr)
             self.timer.end("train_step/update_step")
 
         # occasionally update target network with q network
@@ -242,7 +242,7 @@ class Model:
         # occasionally save the weights
         if t % self.config.saving_freq == 0:
             self.timer.start("train_step/save")
-            self.save_parameters()
+            self.save_parameters(t)
             self.timer.end("train_step/save")
 
         return loss_eval, grad_eval
@@ -338,5 +338,11 @@ class Model:
         self.summary_writer.add_scalar("Std_Q", self.std_q, t)
         self.summary_writer.add_scalar("Eval_Reward", self.eval_reward, t)
 
-    def save_parameters(self):
-        torch.save(self.dqn.get_parameters(), self.config.model_output)
+    def save_parameters(self, t):
+        if not os.path.exists(self.config.weights_path):
+            os.makedirs(self.config.weights_path)
+
+        torch.save(
+            self.dqn.get_parameters(),
+            self.config.model_output + str(t + self.dqn.starting_step),
+        )

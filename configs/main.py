@@ -2,14 +2,15 @@ class config:
     # env config
     render_train = False
     render_test = False
-    env_name = "Pong-v0"
+    env_name = "DemonAttack-v0"
     overwrite_render = True
     record = True
     high = 255.0
 
     # output config
-    output_path = "results/main/"
-    model_output = output_path + "model.weights"
+    output_path = "results/main/" + env_name + "/"
+    weights_path = "weights/" + env_name + "/"
+    model_output = weights_path + "model.weights_step="
     log_path = output_path + "log.txt"
     plot_output = output_path + "scores.png"
     record_path = output_path + "monitor/"
