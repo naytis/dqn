@@ -8,9 +8,9 @@ class config:
     high = 255.0
 
     # output config
-    output_path = "results/main/" + env_name + "/"
-    weights_path = "weights/" + env_name + "/"
-    model_output = weights_path + "model.weights_step="
+    output_path = "results/" + env_name + "/"
+    model_weights_path = "weights/" + env_name + "/model.weights"
+    model_output = output_path + "model.weights"
     log_path = output_path + "log.txt"
     plot_output = output_path + "scores.png"
     record_path = output_path + "monitor/"
@@ -19,14 +19,14 @@ class config:
     num_episodes_test = 50
     grad_clip = True
     clip_val = 10
-    saving_freq = 250000
+    saving_freq = 500000
     log_freq = 50
     eval_freq = 250000
-    record_freq = 250000
+    record_freq = 500000
     soft_epsilon = 0.05
 
     # nature paper hyper params
-    nsteps_train = 2000000
+    nsteps_train = 6000000
     batch_size = 32
     buffer_size = 1000000
     target_update_freq = 10000

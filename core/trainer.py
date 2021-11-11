@@ -15,7 +15,7 @@ from utils.replay_buffer import ReplayBuffer
 from utils.wrappers import MaxAndSkipEnv, PreproWrapper
 
 
-class Model:
+class Trainer:
     def __init__(self, env, config, logger=None):
         if not os.path.exists(config.output_path):
             os.makedirs(config.output_path)
@@ -174,7 +174,7 @@ class Model:
                     t % self.config.log_freq == 0
                 ):
                     sys.stdout.write(
-                        "\rPopulating the memory {}/{}...".format(
+                        "\rPopulating the memory {}/{}...\n".format(
                             t, self.config.learning_start
                         )
                     )
@@ -212,7 +212,7 @@ class Model:
 
         # last words
         self.logger.info("- Training done.")
-        self.save_parameters(self.config.nsteps_train)
+        self.save_parameters()
         scores_eval += [self.evaluate()]
         export_plot(scores_eval, "Scores", self.config.plot_output)
 
@@ -242,7 +242,7 @@ class Model:
         # occasionally save the weights
         if t % self.config.saving_freq == 0:
             self.timer.start("train_step/save")
-            self.save_parameters(t)
+            self.save_parameters()
             self.timer.end("train_step/save")
 
         return loss_eval, grad_eval
@@ -338,11 +338,8 @@ class Model:
         self.summary_writer.add_scalar("Std_Q", self.std_q, t)
         self.summary_writer.add_scalar("Eval_Reward", self.eval_reward, t)
 
-    def save_parameters(self, t):
-        if not os.path.exists(self.config.weights_path):
-            os.makedirs(self.config.weights_path)
-
+    def save_parameters(self):
         torch.save(
             self.dqn.get_parameters(),
-            self.config.model_output + str(t + self.dqn.starting_step),
+            self.config.model_output,
         )

@@ -161,21 +161,12 @@ class DeepQNetwork:
     def build_model(self) -> None:
         self.initialize_models()
 
-        if os.path.exists(self.config.weights_path) and os.listdir(
-            self.config.weights_path
+        if (
+            hasattr(self.config, "model_weights_path")
+            and os.path.exists(self.config.weights_path)
+            and os.listdir(self.config.weights_path)
         ):
-            weights_files = os.listdir(self.config.weights_path)
-
-            def extract_step_number(f):
-                step_number = re.findall("\d+$", f)
-                return int(step_number[0]) if step_number else -1, f
-
-            last_weights_file = max(weights_files, key=extract_step_number)
-            weights_file_path = self.config.weights_path + last_weights_file
-            self.starting_step = int(weights_file_path[len(self.config.model_output) :])
-
-            print("Loading parameters from file:", weights_file_path)
-            weights_file_path = Path(weights_file_path)
+            weights_file_path = Path(self.config.model_weights_path)
             assert (
                 weights_file_path.is_file()
             ), f"Provided weights file ({weights_file_path}) does not exist"
@@ -186,13 +177,13 @@ class DeepQNetwork:
         else:
             print("Initializing parameters randomly")
 
-            def init_weights(m):
-                if hasattr(m, "weight"):
-                    nn.init.xavier_uniform_(m.weight, gain=2 ** (1.0 / 2))
-                if hasattr(m, "bias"):
-                    nn.init.zeros_(m.bias)
+        def init_weights(m):
+            if hasattr(m, "weight"):
+                nn.init.xavier_uniform_(m.weight, gain=2 ** (1.0 / 2))
+            if hasattr(m, "bias"):
+                nn.init.zeros_(m.bias)
 
-            self.q_network.apply(init_weights)
+        self.q_network.apply(init_weights)
 
         self.q_network = self.q_network.to(self.device)
         self.target_network = self.target_network.to(self.device)

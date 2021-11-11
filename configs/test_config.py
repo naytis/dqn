@@ -7,7 +7,7 @@ class config:
     high = 255.0
 
     # output config
-    output_path = "results/dqn_test/"
+    output_path = "results/test/"
     model_output = output_path + "model.weights"
     log_path = output_path + "log.txt"
     plot_output = output_path + "scores.png"

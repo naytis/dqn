@@ -35,6 +35,7 @@ def get_logger(filename):
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s: %(message)s"))
     logging.getLogger().addHandler(handler)
+    logging.getLogger("matplotlib").setLevel(logging.ERROR)
     return logger
 
 
@@ -148,7 +149,7 @@ class Progbar(object):
             self.total_width += len(info)
             if prev_total_width > self.total_width:
                 info += (prev_total_width - self.total_width) * " "
-
+            info += "\n"
             sys.stdout.write(info)
             sys.stdout.flush()
 
