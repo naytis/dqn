@@ -18,7 +18,7 @@ class NetworkType(enum.Enum):
 
 
 class DeepQNetwork:
-    def __init__(self, env, config, timer):
+    def __init__(self, env, config):
         self.q_network = None
         self.target_network = None
         self.optimizer = None
@@ -27,7 +27,6 @@ class DeepQNetwork:
 
         self.config = config
         self.env = env
-        self.timer = timer
 
         self.build_model()
 
@@ -221,14 +220,11 @@ class DeepQNetwork:
         Returns:
             loss: (Q - Q_target)^2
         """
-        self.timer.start("update_step/replay_buffer.sample")
         s_batch, a_batch, r_batch, sp_batch, done_mask_batch = replay_buffer.sample(
             self.config.batch_size
         )
-        self.timer.end("update_step/replay_buffer.sample")
 
         # Convert to Tensor and move to correct device
-        self.timer.start("update_step/converting_tensors")
         s_batch = torch.tensor(s_batch, dtype=torch.uint8, device=self.device)
         a_batch = torch.tensor(a_batch, dtype=torch.uint8, device=self.device)
         r_batch = torch.tensor(r_batch, dtype=torch.float, device=self.device)
@@ -236,47 +232,32 @@ class DeepQNetwork:
         done_mask_batch = torch.tensor(
             done_mask_batch, dtype=torch.bool, device=self.device
         )
-        self.timer.end("update_step/converting_tensors")
 
         # Reset Optimizer
-        self.timer.start("update_step/zero_grad")
         self.optimizer.zero_grad()
-        self.timer.end("update_step/zero_grad")
 
         # Run a forward pass
-        self.timer.start("update_step/forward_pass_q")
         s = self.process_state(s_batch)
         q_values = self.get_q_values(s, NetworkType.Q_NETWORK)
-        self.timer.end("update_step/forward_pass_q")
 
-        self.timer.start("update_step/forward_pass_target")
         with torch.no_grad():
             sp = self.process_state(sp_batch)
             target_q_values = self.get_q_values(sp, NetworkType.TARGET_NETWORK)
-        self.timer.end("update_step/forward_pass_target")
 
-        self.timer.start("update_step/loss_calc")
         loss = self.calc_loss(
             q_values, target_q_values, a_batch, r_batch, done_mask_batch
         )
-        self.timer.end("update_step/loss_calc")
-        self.timer.start("update_step/loss_backward")
         loss.backward()
-        self.timer.end("update_step/loss_backward")
 
         # Clip norm
-        self.timer.start("update_step/grad_clip")
         total_norm = torch.nn.utils.clip_grad_norm_(
             self.q_network.parameters(), self.config.clip_val
         )
-        self.timer.end("update_step/grad_clip")
 
         # Update parameters with optimizer
-        self.timer.start("update_step/optimizer")
         for group in self.optimizer.param_groups:
             group["lr"] = lr
         self.optimizer.step()
-        self.timer.end("update_step/optimizer")
         return loss.item(), total_norm.item()
 
     def synchronize_networks(self):
