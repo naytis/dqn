@@ -22,7 +22,7 @@ class ReplayBuffer(object):
     def __init__(self, size, frame_history_len):
         """This is a memory efficient implementation of the replay buffer.
 
-        The sepecific memory optimizations use here are:
+        The specific memory optimizations use here are:
             - only store each frame once rather than k times
               even if every observation normally consists of k last frames
             - store frames as np.uint8 (actually it is most time-performance
@@ -30,11 +30,11 @@ class ReplayBuffer(object):
               time)
             - store frame_t and frame_(t+1) in the same buffer.
 
-        For the tipical use case in Atari Deep RL buffer with 1M frames the total
+        For the typical use case in Atari Deep RL buffer with 1M frames the total
         memory footprint of this buffer is 10^6 * 84 * 84 bytes ~= 7 gigabytes
 
         Warning! Assumes that returning frame of zeros at the beginning
-        of the episode, when there is less frames than `frame_history_len`,
+        of the episode, when there is less frames than `history_length`,
         is acceptable.
 
         Parameters
@@ -115,14 +115,14 @@ class ReplayBuffer(object):
         return self._encode_sample(idxes)
 
     def encode_recent_observation(self):
-        """Return the most recent `frame_history_len` frames.
+        """Return the most recent `history_length` frames.
 
         Returns
         -------
         observation: np.array
-            Array of shape (img_h, img_w, img_c * frame_history_len)
-            and dtype np.uint8, where observation[:, :, i*img_c:(i+1)*img_c]
-            encodes frame at time `t - frame_history_len + i`
+            Array of shape (img_height, img_width, img_channels * history_length)
+            and dtype np.uint8, where observation[:, :, i * img_channels:(i + 1) * img_channels]
+            encodes frame at time `t - history_length + i`
         """
         assert self.num_in_buffer > 0
         return self._encode_observation((self.next_idx - 1) % self.size)
@@ -157,19 +157,19 @@ class ReplayBuffer(object):
                 .reshape(img_h, img_w, -1)
             )
 
-    def store_frame(self, frame):
+    def store_frame(self, frame: np.array) -> int:
         """Store a single frame in the buffer at the next available index, overwriting
         old frames if necessary.
 
         Parameters
         ----------
-        frame: np.array
+        frame:
             Array of shape (img_h, img_w, img_c) and dtype np.uint8
             the frame to be stored
 
         Returns
         -------
-        idx: int
+        idx:
             Index at which the frame is stored. To be used for `store_effect` later.
         """
         if self.obs is None:

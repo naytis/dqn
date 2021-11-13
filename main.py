@@ -7,7 +7,7 @@ from utils.preprocess import greyscale
 from utils.test_env import EnvTest
 from utils.wrappers import PreproWrapper, MaxAndSkipEnv
 
-from core.schedule import LinearExploration, LinearLearningRate
+from core.schedule import ExplorationSchedule, LearningRateSchedule
 
 from configs.config import Config
 from configs.test_config import TestConfig
@@ -41,11 +41,11 @@ if __name__ == "__main__":
             overwrite_render=config.overwrite_render,
         )
 
-    exp_schedule = LinearExploration(
+    exp_schedule = ExplorationSchedule(
         env, config.epsilon_init, config.epsilon_end, config.epsilon_interp_limit
     )
 
-    lr_schedule = LinearLearningRate(
+    lr_schedule = LearningRateSchedule(
         config.alpha_init, config.alpha_end, config.alpha_interp_limit
     )
 

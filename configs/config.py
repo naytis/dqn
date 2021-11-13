@@ -18,19 +18,19 @@ class Config:
     # model and training config
     num_episodes_test = 50
     clip_val = 10
-    saving_freq = 500e3
+    saving_freq = 500000
     log_freq = 250
-    eval_freq = 250e3
-    record_freq = 500e3
+    eval_freq = 250000
+    record_freq = 500000
     soft_epsilon = 0.05
 
     # nature paper hyper params
-    num_steps_train = 10e6
+    num_steps_train = 10000000
     batch_size = 32
-    buffer_size = 1e6
-    target_update_freq = 10e3
+    buffer_size = 100000
+    target_update_freq = 10000
     gamma = 0.99
-    learning_freq = 4
+    learning_freq = 5
     history_length = 4
     skip_frame = 4
     alpha_init = 0.00008

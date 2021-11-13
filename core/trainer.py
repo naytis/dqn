@@ -1,23 +1,32 @@
 import os
 import sys
 from collections import deque
-from typing import Deque, List
+from typing import Deque, List, Union, Type, Tuple
 
 import gym
 import numpy as np
 import torch
+from gym import Env as GymEnv
 from torch.utils.tensorboard import SummaryWriter
 
+from configs.config import Config
+from configs.test_config import TestConfig
 from core.deep_q_network import DeepQNetwork
-from core.schedule import LinearExploration, LinearLearningRate
-from utils.general import Progbar, get_logger, export_plot
+from core.schedule import ExplorationSchedule, LearningRateSchedule
+from utils.general import ProgressBar, get_logger, export_plot
 from utils.preprocess import greyscale
 from utils.replay_buffer import ReplayBuffer
+from utils.test_env import EnvTest
 from utils.wrappers import MaxAndSkipEnv, PreproWrapper
 
 
 class Trainer:
-    def __init__(self, env, config, logger=None):
+    def __init__(
+        self,
+        env: Union[EnvTest, GymEnv],
+        config: Type[Union[Config, TestConfig]],
+        logger=None,
+    ):
         if not os.path.exists(config.output_path):
             os.makedirs(config.output_path)
 
@@ -31,18 +40,19 @@ class Trainer:
 
         self.summary_writer = SummaryWriter(self.config.output_path, max_queue=1e5)
 
-        # Defines extra attributes for tensorboard
-        self.avg_reward = -21.0
-        self.max_reward = -21.0
+        self.avg_reward = 0
+        self.max_reward = 0
         self.std_reward = 0
 
         self.avg_q = 0
         self.max_q = 0
         self.std_q = 0
 
-        self.eval_reward = -21.0
+        self.eval_reward = 0
 
-    def run(self, exp_schedule, lr_schedule):
+    def run(
+        self, exp_schedule: ExplorationSchedule, lr_schedule: LearningRateSchedule
+    ) -> None:
         self.dqn.synchronize_networks()
 
         if self.config.record:
@@ -53,67 +63,59 @@ class Trainer:
         if self.config.record:
             self.record()
 
-    def train(self, exp_schedule: LinearExploration, lr_schedule: LinearLearningRate):
-        # initialize replay buffer and variables
+    def train(
+        self, exp_schedule: ExplorationSchedule, lr_schedule: LearningRateSchedule
+    ) -> None:
         replay_buffer = ReplayBuffer(
             self.config.buffer_size, self.config.history_length
         )
-        rewards = deque(maxlen=self.config.num_episodes_test)
+        rewards = deque(maxlen=1000)
         max_q_values = deque(maxlen=1000)
         q_values = deque(maxlen=1000)
 
-        t = last_eval = last_record = 0  # time control of nb of steps
-        scores_eval = []  # list of scores computed at iteration time
+        scores_eval = []
         scores_eval += [self.evaluate()]
 
-        prog = Progbar(target=self.config.num_steps_train)
+        bar = ProgressBar(target=self.config.num_steps_train)
 
-        # interact with environment
+        t = 0
         while t < self.config.num_steps_train:
-            total_reward = 0
+            episode_reward = 0
             state = self.env.reset()
+
             while True:
                 t += 1
-                last_eval += 1
-                last_record += 1
                 if self.config.render_train:
                     self.env.render()
-                # replay memory stuff
-                idx = replay_buffer.store_frame(state)
-                q_input = replay_buffer.encode_recent_observation()
 
-                # chose action according to current Q and exploration
-                best_action, q_vals = self.dqn.get_best_action(q_input)
+                frame_index = replay_buffer.store_frame(state)
+                dqn_input = replay_buffer.encode_recent_observation()
+
+                best_action, state_action_values = self.dqn.get_best_action(dqn_input)
                 action = exp_schedule.get_action(best_action)
 
-                # store q values
-                max_q_values.append(max(q_vals))
-                q_values += list(q_vals)
+                max_q_values.append(max(state_action_values))
+                q_values += list(state_action_values)
 
-                # perform action in env
-                new_state, reward, done, info = self.env.step(action)
+                state, reward, done, info = self.env.step(action)
+                replay_buffer.store_effect(frame_index, action, reward, done)
 
-                # store the transition
-                replay_buffer.store_effect(idx, action, reward, done)
-                state = new_state
-
-                # perform a training step
                 loss_eval, grad_eval = self.train_step(
                     t, replay_buffer, lr_schedule.alpha
                 )
 
-                # logging stuff
                 if (
-                    (t > self.config.learning_start)
-                    and (t % self.config.log_freq == 0)
-                    and (t % self.config.learning_freq == 0)
+                    t > self.config.learning_start
+                    and t % self.config.learning_freq == 0
                 ):
-                    self.update_averages(rewards, max_q_values, q_values, scores_eval)
-                    self.add_summary(loss_eval, grad_eval, t)
                     exp_schedule.update_epsilon(t)
                     lr_schedule.update_alpha(t)
+
+                if t > self.config.learning_start and t % self.config.log_freq == 0:
+                    self.update_averages(rewards, max_q_values, q_values, scores_eval)
+                    self.add_summary(loss_eval, grad_eval, t)
                     if len(rewards) > 0:
-                        prog.update(
+                        bar.update(
                             t + 1,
                             exact=[
                                 ("Loss", loss_eval),
@@ -126,72 +128,54 @@ class Trainer:
                             ],
                             base=self.config.learning_start,
                         )
-                elif (t < self.config.learning_start) and (
-                    t % self.config.log_freq == 0
-                ):
+                elif t < self.config.learning_start and t % self.config.log_freq == 0:
                     sys.stdout.write(
                         "\rPopulating the memory {}/{}...".format(
                             t, self.config.learning_start
                         )
                     )
                     sys.stdout.flush()
-                    prog.reset_start()
+                    bar.reset_start()
 
-                # count reward
-                total_reward += reward
+                episode_reward += reward
                 if done or t >= self.config.num_steps_train:
                     break
 
-            # updates to perform at the end of an episode
-            rewards.append(total_reward)
+            rewards.append(episode_reward)
 
-            if (t > self.config.learning_start) and (last_eval > self.config.eval_freq):
-                # evaluate our policy
-                last_eval = 0
-                print("")
+            if t > self.config.learning_start and t % self.config.eval_freq == 0:
                 scores_eval += [self.evaluate()]
 
             if (
                 (t > self.config.learning_start)
                 and self.config.record
-                and (last_record > self.config.record_freq)
+                and (t % self.config.record_freq == 0)
             ):
                 self.logger.info("Recording...")
-                last_record = 0
                 self.record()
 
-        # last words
         self.logger.info("- Training done.")
         self.save_parameters()
         scores_eval += [self.evaluate()]
         export_plot(scores_eval, "Scores", self.config.plot_output)
 
-    def train_step(self, t, replay_buffer, lr):
-        """
-        Perform training step
-
-        Args:
-            t: (int) nths step
-            replay_buffer: buffer for sampling
-            lr: (float) learning rate
-        """
+    def train_step(
+        self, t: int, replay_buffer: ReplayBuffer, alpha: float
+    ) -> Tuple[int, int]:
         loss_eval, grad_eval = 0, 0
 
-        # perform training step
         if t > self.config.learning_start and t % self.config.learning_freq == 0:
-            loss_eval, grad_eval = self.dqn.update_step(replay_buffer, lr)
+            loss_eval, grad_eval = self.dqn.update_params(replay_buffer, alpha)
 
-        # occasionally update target network with q network
         if t % self.config.target_update_freq == 0:
             self.dqn.synchronize_networks()
 
-        # occasionally save the weights
         if t % self.config.saving_freq == 0:
             self.save_parameters()
 
         return loss_eval, grad_eval
 
-    def evaluate(self, env=None, num_episodes=None):
+    def evaluate(self, env=None, num_episodes=None) -> float:
         if num_episodes is None:
             self.logger.info("Evaluating...")
             num_episodes = self.config.num_episodes_test
@@ -216,10 +200,8 @@ class Trainer:
 
                 action = self.dqn.get_action(q_input)
 
-                new_state, reward, done, info = env.step(action)
-
+                state, reward, done, info = env.step(action)
                 replay_buffer.store_effect(index, action, reward, done)
-                state = new_state
 
                 total_reward += reward
                 if done:
@@ -238,15 +220,12 @@ class Trainer:
 
         return avg_reward
 
-    def record(self):
-        """
-        Re create an env and record a video for one episode
-        """
+    def record(self) -> None:
         env = gym.make(self.config.env_name)
         env = gym.wrappers.Monitor(
             env,
             self.config.record_path,
-            resume=True,  # , video_callable=lambda x: True,
+            resume=True,
         )
         env = MaxAndSkipEnv(env, skip=self.config.skip_frame)
         env = PreproWrapper(
@@ -259,7 +238,7 @@ class Trainer:
 
     def update_averages(
         self, rewards: Deque, max_q_values: Deque, q_values: Deque, scores_eval: List
-    ):
+    ) -> None:
         self.avg_reward = np.mean(rewards)
         self.max_reward = np.max(rewards)
         self.std_reward = np.sqrt(np.var(rewards) / len(rewards))
@@ -271,10 +250,7 @@ class Trainer:
         if len(scores_eval) > 0:
             self.eval_reward = scores_eval[-1]
 
-    def add_summary(self, latest_loss, latest_total_norm, t):
-        """
-        Tensorboard stuff
-        """
+    def add_summary(self, latest_loss: int, latest_total_norm: int, t: int) -> None:
         self.summary_writer.add_scalar("Loss", latest_loss, t)
         self.summary_writer.add_scalar("Gradients Norm", latest_total_norm, t)
         self.summary_writer.add_scalar("Avg Reward", self.avg_reward, t)
@@ -285,7 +261,7 @@ class Trainer:
         self.summary_writer.add_scalar("Std Q", self.std_q, t)
         self.summary_writer.add_scalar("Evaluated Reward", self.eval_reward, t)
 
-    def save_parameters(self):
+    def save_parameters(self) -> None:
         torch.save(
             self.dqn.get_parameters(),
             self.config.model_output,
