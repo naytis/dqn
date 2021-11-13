@@ -22,14 +22,6 @@ class SimpleImageViewer(object):
             self.height = height
             self.isopen = True
 
-        ##########################
-        ####### old version ######
-        # assert arr.shape == (self.height, self.width, I), "You passed in an image with the wrong number shape"
-        # image = pyglet.image.ImageData(self.width, self.height, 'RGB', arr.tobytes())
-        ##########################
-
-        ##########################
-        ####### new version ######
         nchannels = arr.shape[-1]
         if nchannels == 1:
             _format = "I"
@@ -38,7 +30,6 @@ class SimpleImageViewer(object):
         else:
             raise NotImplementedError
         image = pyglet.image.ImageData(self.width, self.height, _format, arr.tobytes())
-        ##########################
 
         self.window.clear()
         self.window.switch_to()

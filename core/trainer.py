@@ -1,6 +1,7 @@
 import os
 import sys
 from collections import deque
+from typing import Deque, List
 
 import gym
 import numpy as np
@@ -8,6 +9,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from core.deep_q_network import DeepQNetwork
+from core.schedule import LinearExploration, LinearLearningRate
 from core.timer import Timer
 from utils.general import Progbar, get_logger, export_plot
 from utils.preprocess import greyscale
@@ -24,30 +26,14 @@ class Trainer:
         self.logger = logger
         if logger is None:
             self.logger = get_logger(config.log_path)
+
         self.env = env
         self.timer = Timer(False)
         self.dqn = DeepQNetwork(env, config, self.timer)
 
         self.summary_writer = SummaryWriter(self.config.output_path, max_queue=1e5)
 
-    def run(self, exp_schedule, lr_schedule):
-        self.dqn.synchronize_networks()
-
-        # record one game at the beginning
-        if self.config.record:
-            self.record()
-
-        # model
-        self.train(exp_schedule, lr_schedule)
-
-        # record one game at the end
-        if self.config.record:
-            self.record()
-
-    def init_averages(self):
-        """
-        Defines extra attributes for tensorboard
-        """
+        # Defines extra attributes for tensorboard
         self.avg_reward = -21.0
         self.max_reward = -21.0
         self.std_reward = 0
@@ -58,48 +44,34 @@ class Trainer:
 
         self.eval_reward = -21.0
 
-    def update_averages(self, rewards, max_q_values, q_values, scores_eval):
-        """
-        Args:
-            rewards: deque
-            max_q_values: deque
-            q_values: deque
-            scores_eval: list
-        """
-        self.avg_reward = np.mean(rewards)
-        self.max_reward = np.max(rewards)
-        self.std_reward = np.sqrt(np.var(rewards) / len(rewards))
+    def run(self, exp_schedule, lr_schedule):
+        self.dqn.synchronize_networks()
 
-        self.max_q = np.mean(max_q_values)
-        self.avg_q = np.mean(q_values)
-        self.std_q = np.sqrt(np.var(q_values) / len(q_values))
+        if self.config.record:
+            self.record()
 
-        if len(scores_eval) > 0:
-            self.eval_reward = scores_eval[-1]
+        self.train(exp_schedule, lr_schedule)
 
-    def train(self, exp_schedule, lr_schedule):
-        """
-        Args:
-            exp_schedule: Exploration instance s.t.
-                exp_schedule.get_action(best_action) returns an action
-            lr_schedule: Schedule for learning rate
-        """
+        if self.config.record:
+            self.record()
 
+    def train(self, exp_schedule: LinearExploration, lr_schedule: LinearLearningRate):
         # initialize replay buffer and variables
-        replay_buffer = ReplayBuffer(self.config.buffer_size, self.config.state_history)
+        replay_buffer = ReplayBuffer(
+            self.config.buffer_size, self.config.history_length
+        )
         rewards = deque(maxlen=self.config.num_episodes_test)
         max_q_values = deque(maxlen=1000)
         q_values = deque(maxlen=1000)
-        self.init_averages()
 
         t = last_eval = last_record = 0  # time control of nb of steps
         scores_eval = []  # list of scores computed at iteration time
         scores_eval += [self.evaluate()]
 
-        prog = Progbar(target=self.config.nsteps_train)
+        prog = Progbar(target=self.config.num_steps_train)
 
         # interact with environment
-        while t < self.config.nsteps_train:
+        while t < self.config.num_steps_train:
             total_reward = 0
             self.timer.start("env.reset")
             state = self.env.reset()
@@ -140,7 +112,7 @@ class Trainer:
                 # perform a training step
                 self.timer.start("train_step")
                 loss_eval, grad_eval = self.train_step(
-                    t, replay_buffer, lr_schedule.epsilon
+                    t, replay_buffer, lr_schedule.alpha
                 )
                 self.timer.end("train_step")
 
@@ -154,7 +126,7 @@ class Trainer:
                     self.update_averages(rewards, max_q_values, q_values, scores_eval)
                     self.add_summary(loss_eval, grad_eval, t)
                     exp_schedule.update_epsilon(t)
-                    lr_schedule.update_epsilon(t)
+                    lr_schedule.update_alpha(t)
                     if len(rewards) > 0:
                         prog.update(
                             t + 1,
@@ -165,7 +137,7 @@ class Trainer:
                                 ("eps", exp_schedule.epsilon),
                                 ("Grads", grad_eval),
                                 ("Max_Q", self.max_q),
-                                ("lr", lr_schedule.epsilon),
+                                ("lr", lr_schedule.alpha),
                             ],
                             base=self.config.learning_start,
                         )
@@ -174,7 +146,7 @@ class Trainer:
                     t % self.config.log_freq == 0
                 ):
                     sys.stdout.write(
-                        "\rPopulating the memory {}/{}...\n".format(
+                        "\rPopulating the memory {}/{}...".format(
                             t, self.config.learning_start
                         )
                     )
@@ -183,7 +155,7 @@ class Trainer:
 
                 # count reward
                 total_reward += reward
-                if done or t >= self.config.nsteps_train:
+                if done or t >= self.config.num_steps_train:
                     break
 
             # updates to perform at the end of an episode
@@ -248,22 +220,16 @@ class Trainer:
         return loss_eval, grad_eval
 
     def evaluate(self, env=None, num_episodes=None):
-        """
-        Evaluation with same procedure as the training
-        """
-        # log our activity only if default call
         if num_episodes is None:
             self.logger.info("Evaluating...")
-
-        # arguments defaults
-        if num_episodes is None:
             num_episodes = self.config.num_episodes_test
 
         if env is None:
             env = self.env
 
-        # replay memory to play
-        replay_buffer = ReplayBuffer(self.config.buffer_size, self.config.state_history)
+        replay_buffer = ReplayBuffer(
+            self.config.buffer_size, self.config.history_length
+        )
         rewards = []
 
         for i in range(num_episodes):
@@ -273,25 +239,20 @@ class Trainer:
                 if self.config.render_test:
                     env.render()
 
-                # store last state in buffer
-                idx = replay_buffer.store_frame(state)
+                index = replay_buffer.store_frame(state)
                 q_input = replay_buffer.encode_recent_observation()
 
                 action = self.dqn.get_action(q_input)
 
-                # perform action in env
                 new_state, reward, done, info = env.step(action)
 
-                # store in replay memory
-                replay_buffer.store_effect(idx, action, reward, done)
+                replay_buffer.store_effect(index, action, reward, done)
                 state = new_state
 
-                # count reward
                 total_reward += reward
                 if done:
                     break
 
-            # updates to perform at the end of an episode
             rewards.append(total_reward)
 
         avg_reward = np.mean(rewards)
@@ -324,19 +285,33 @@ class Trainer:
         )
         self.evaluate(env, 1)
 
+    def update_averages(
+        self, rewards: Deque, max_q_values: Deque, q_values: Deque, scores_eval: List
+    ):
+        self.avg_reward = np.mean(rewards)
+        self.max_reward = np.max(rewards)
+        self.std_reward = np.sqrt(np.var(rewards) / len(rewards))
+
+        self.max_q = np.mean(max_q_values)
+        self.avg_q = np.mean(q_values)
+        self.std_q = np.sqrt(np.var(q_values) / len(q_values))
+
+        if len(scores_eval) > 0:
+            self.eval_reward = scores_eval[-1]
+
     def add_summary(self, latest_loss, latest_total_norm, t):
         """
         Tensorboard stuff
         """
-        self.summary_writer.add_scalar("loss", latest_loss, t)
-        self.summary_writer.add_scalar("grad_norm", latest_total_norm, t)
-        self.summary_writer.add_scalar("Avg_Reward", self.avg_reward, t)
-        self.summary_writer.add_scalar("Max_Reward", self.max_reward, t)
-        self.summary_writer.add_scalar("Std_Reward", self.std_reward, t)
-        self.summary_writer.add_scalar("Avg_Q", self.avg_q, t)
-        self.summary_writer.add_scalar("Max_Q", self.max_q, t)
-        self.summary_writer.add_scalar("Std_Q", self.std_q, t)
-        self.summary_writer.add_scalar("Eval_Reward", self.eval_reward, t)
+        self.summary_writer.add_scalar("Loss", latest_loss, t)
+        self.summary_writer.add_scalar("Gradients Norm", latest_total_norm, t)
+        self.summary_writer.add_scalar("Avg Reward", self.avg_reward, t)
+        self.summary_writer.add_scalar("Max Reward", self.max_reward, t)
+        self.summary_writer.add_scalar("Std Reward", self.std_reward, t)
+        self.summary_writer.add_scalar("Avg Q", self.avg_q, t)
+        self.summary_writer.add_scalar("Max Q", self.max_q, t)
+        self.summary_writer.add_scalar("Std Q", self.std_q, t)
+        self.summary_writer.add_scalar("Evaluated Reward", self.eval_reward, t)
 
     def save_parameters(self):
         torch.save(

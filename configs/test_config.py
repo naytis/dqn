@@ -1,4 +1,4 @@
-class config:
+class TestConfig:
     # env config
     render_train = False
     render_test = False
@@ -14,7 +14,6 @@ class config:
 
     # model and training config
     num_episodes_test = 20
-    grad_clip = True
     clip_val = 10
     saving_freq = 5000
     log_freq = 50
@@ -22,17 +21,17 @@ class config:
     soft_epsilon = 0
 
     # hyper params
-    nsteps_train = 2000
+    num_steps_train = 2000
     batch_size = 32
     buffer_size = 500
     target_update_freq = 500
     gamma = 0.99
     learning_freq = 4
-    state_history = 4
-    lr_begin = 0.00025
-    lr_end = 0.0001
-    lr_nsteps = nsteps_train / 2
-    eps_begin = 1
-    eps_end = 0.01
-    eps_nsteps = nsteps_train / 2
+    history_length = 4
+    alpha_init = 0.00025
+    alpha_end = 0.0001
+    alpha_interp_limit = num_steps_train / 2
+    epsilon_init = 1
+    epsilon_end = 0.01
+    epsilon_interp_limit = num_steps_train / 2
     learning_start = 200

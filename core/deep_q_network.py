@@ -1,6 +1,5 @@
 import enum
 import os
-import re
 from collections import OrderedDict
 from pathlib import Path
 from typing import Tuple
@@ -45,7 +44,7 @@ class DeepQNetwork:
                 (
                     "conv1",
                     nn.Conv2d(
-                        in_channels=n_channels * self.config.state_history,
+                        in_channels=n_channels * self.config.history_length,
                         out_channels=32,
                         kernel_size=8,
                         stride=4,
@@ -163,8 +162,8 @@ class DeepQNetwork:
 
         if (
             hasattr(self.config, "model_weights_path")
-            and os.path.exists(self.config.weights_path)
-            and os.listdir(self.config.weights_path)
+            and os.path.exists(self.config.model_weights_path)
+            and os.listdir(self.config.model_weights_path)
         ):
             weights_file_path = Path(self.config.model_weights_path)
             assert (
@@ -207,10 +206,6 @@ class DeepQNetwork:
         return action, action_values
 
     def get_action(self, state):
-        """
-        Args:
-            state: observation from gym
-        """
         if np.random.random() < self.config.soft_epsilon:
             return self.env.action_space.sample()
         else:
