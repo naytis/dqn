@@ -7,7 +7,7 @@ from collections import deque
 
 class MaxAndSkipEnv(gym.Wrapper):
     """
-    Wrapper from Berkeley's Assignment
+    Taken from Berkeley's Assignment
     Takes a max pool over the last n states
     """
 

@@ -1,8 +1,6 @@
 import enum
-import os
 from collections import OrderedDict
-from pathlib import Path
-from typing import Tuple, Union, Type
+from typing import Tuple, Type
 
 import numpy as np
 import torch
@@ -12,10 +10,8 @@ import torch.optim as optim
 from torch.tensor import Tensor
 from gym import Env as GymEnv
 
-from configs.config import Config
-from configs.test_config import TestConfig
+from config import Config
 from utils.replay_buffer import ReplayBuffer
-from utils.test_env import EnvTest
 
 
 class NetworkType(enum.Enum):
@@ -24,9 +20,7 @@ class NetworkType(enum.Enum):
 
 
 class DeepQNetwork:
-    def __init__(
-        self, env: Union[EnvTest, GymEnv], config: Type[Union[Config, TestConfig]]
-    ):
+    def __init__(self, env: GymEnv, config: Type[Config]):
         self.q_network = None
         self.target_network = None
         self.optimizer = None
@@ -41,21 +35,7 @@ class DeepQNetwork:
     def build_model(self) -> None:
         self.initialize_models()
 
-        if (
-            hasattr(self.config, "model_weights_path")
-            and os.path.exists(self.config.model_weights_path)
-            and os.listdir(self.config.model_weights_path)
-        ):
-            weights_file_path = Path(self.config.model_weights_path)
-            assert (
-                weights_file_path.is_file()
-            ), f"Provided weights file ({weights_file_path}) does not exist"
-            self.q_network.load_state_dict(
-                torch.load(weights_file_path, map_location="cpu")
-            )
-            print("Load successful!")
-        else:
-            print("Initializing parameters randomly")
+        print("Initializing parameters randomly")
 
         def init_weights(m):
             if hasattr(m, "weight"):

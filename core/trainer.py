@@ -1,7 +1,7 @@
 import os
 import sys
 from collections import deque
-from typing import Deque, List, Union, Type, Tuple
+from typing import Deque, List, Type, Tuple
 
 import gym
 import numpy as np
@@ -9,22 +9,20 @@ import torch
 from gym import Env as GymEnv
 from torch.utils.tensorboard import SummaryWriter
 
-from configs.config import Config
-from configs.test_config import TestConfig
+from config import Config
 from core.deep_q_network import DeepQNetwork
 from core.schedule import ExplorationSchedule, LearningRateSchedule
 from utils.general import ProgressBar, get_logger, export_plot
 from utils.preprocess import greyscale
 from utils.replay_buffer import ReplayBuffer
-from utils.test_env import EnvTest
 from utils.wrappers import MaxAndSkipEnv, PreproWrapper
 
 
 class Trainer:
     def __init__(
         self,
-        env: Union[EnvTest, GymEnv],
-        config: Type[Union[Config, TestConfig]],
+        env: GymEnv,
+        config: Type[Config],
         logger=None,
     ):
         if not os.path.exists(config.output_path):
@@ -73,18 +71,20 @@ class Trainer:
         max_q_values = deque(maxlen=1000)
         q_values = deque(maxlen=1000)
 
+        t = last_eval = last_record = 0
         scores_eval = []
         scores_eval += [self.evaluate()]
 
         bar = ProgressBar(target=self.config.num_steps_train)
 
-        t = 0
         while t < self.config.num_steps_train:
             episode_reward = 0
             state = self.env.reset()
 
             while True:
                 t += 1
+                last_eval += 1
+                last_record += 1
                 if self.config.render_train:
                     self.env.render()
 
@@ -118,13 +118,13 @@ class Trainer:
                         bar.update(
                             t + 1,
                             exact=[
-                                ("Loss", loss_eval),
                                 ("Avg R", self.avg_reward),
                                 ("Max R", np.max(rewards)),
+                                ("Max Q", self.max_q),
                                 ("Epsilon", exp_schedule.epsilon),
-                                ("Grads", grad_eval),
-                                ("Max_Q", self.max_q),
                                 ("Alpha", lr_schedule.alpha),
+                                ("Loss", loss_eval),
+                                ("Grads", grad_eval),
                             ],
                             base=self.config.learning_start,
                         )
@@ -143,15 +143,16 @@ class Trainer:
 
             rewards.append(episode_reward)
 
-            if t > self.config.learning_start and t % self.config.eval_freq == 0:
+            if t > self.config.learning_start and last_eval > self.config.eval_freq:
+                last_eval = 0
                 scores_eval += [self.evaluate()]
 
             if (
-                (t > self.config.learning_start)
+                t > self.config.learning_start
                 and self.config.record
-                and (t % self.config.record_freq == 0)
+                and last_record > self.config.record_freq
             ):
-                self.logger.info("Recording...")
+                last_record = 0
                 self.record()
 
         self.logger.info("- Training done.")
@@ -177,7 +178,7 @@ class Trainer:
 
     def evaluate(self, env=None, num_episodes=None) -> float:
         if num_episodes is None:
-            self.logger.info("Evaluating...")
+            self.logger.info("\nEvaluating...")
             num_episodes = self.config.num_episodes_test
 
         if env is None:
@@ -221,6 +222,7 @@ class Trainer:
         return avg_reward
 
     def record(self) -> None:
+        self.logger.info("Recording...")
         env = gym.make(self.config.env_name)
         env = gym.wrappers.Monitor(
             env,

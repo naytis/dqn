@@ -1,4 +1,4 @@
-class Config:
+class Config(object):
     # env config
     render_train = False
     render_test = False
@@ -9,7 +9,6 @@ class Config:
 
     # output config
     output_path = "results/" + env_name + "/"
-    model_weights_path = "weights/" + env_name + "/model.weights"
     model_output = output_path + "model.weights"
     log_path = output_path + "log.txt"
     plot_output = output_path + "scores.png"
@@ -36,7 +35,7 @@ class Config:
     alpha_init = 0.00008
     alpha_end = 0.00005
     alpha_interp_limit = 500000
-    epsilon_init = 0.5
+    epsilon_init = 1
     epsilon_end = 0.1
     epsilon_interp_limit = 1000000
     learning_start = 50000
