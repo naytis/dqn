@@ -3,21 +3,21 @@ from gym import Env as GymEnv
 
 
 class LearningRateSchedule:
-    def __init__(self, alpha_init: float, alpha_end: float, interp_limit: int):
-        self.alpha = alpha_init
-        self.alpha_init = alpha_init
-        self.alpha_end = alpha_end
+    def __init__(self, lr_init: float, lr_end: float, interp_limit: int):
+        self.lr = lr_init
+        self.lr_init = lr_init
+        self.lr_end = lr_end
         self.interp_limit = interp_limit
 
-    def update_alpha(self, frame_number: int):
-        self.alpha = (
+    def update_lr(self, frame_number: int):
+        self.lr = (
             np.interp(
                 x=frame_number,
                 xp=[0, self.interp_limit],
-                fp=[self.alpha_init, self.alpha_end],
+                fp=[self.lr_init, self.lr_end],
             )
             if frame_number <= self.interp_limit
-            else self.alpha_end
+            else self.lr_end
         )
 
 
@@ -26,13 +26,13 @@ class ExplorationSchedule:
         self,
         env: GymEnv,
         epsilon_init: float,
-        epsilon_end: float,
+        epsilon_final: float,
         interp_limit: int,
     ):
         self.env = env
         self.epsilon = epsilon_init
         self.epsilon_init = epsilon_init
-        self.epsilon_end = epsilon_end
+        self.epsilon_final = epsilon_final
         self.interp_limit = interp_limit
 
     def update_epsilon(self, frame_number: int):
@@ -40,10 +40,10 @@ class ExplorationSchedule:
             np.interp(
                 x=frame_number,
                 xp=[0, self.interp_limit],
-                fp=[self.epsilon_init, self.epsilon_end],
+                fp=[self.epsilon_init, self.epsilon_final],
             )
             if frame_number <= self.interp_limit
-            else self.epsilon_end
+            else self.epsilon_final
         )
 
     def get_action(self, best_action: int) -> int:

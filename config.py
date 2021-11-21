@@ -11,7 +11,6 @@ class Config(object):
     output_path = "results/" + env_name + "/"
     model_output = output_path + "model.weights"
     log_path = output_path + "log.txt"
-    plot_output = output_path + "scores.png"
     record_path = output_path + "monitor/"
 
     # model and training config
@@ -26,16 +25,16 @@ class Config(object):
     # nature paper hyper params
     num_steps_train = 10000000
     batch_size = 32
-    buffer_size = 100000
+    buffer_size = 1000000
     target_update_freq = 10000
     gamma = 0.99
-    learning_freq = 5
+    learning_freq = 4
     history_length = 4
     skip_frame = 4
-    alpha_init = 0.00008
-    alpha_end = 0.00005
-    alpha_interp_limit = 500000
+    lr_init = 0.0001
+    lr_final = 0.00002
+    lr_interp_limit = 1000000
     epsilon_init = 1
-    epsilon_end = 0.1
+    epsilon_final = 0.1
     epsilon_interp_limit = 1000000
     learning_start = 50000

@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from config import Config
 from core.deep_q_network import DeepQNetwork
 from core.schedule import ExplorationSchedule, LearningRateSchedule
-from utils.general import ProgressBar, get_logger, export_plot
+from utils.general import ProgressBar, get_logger
 from utils.preprocess import greyscale
 from utils.replay_buffer import ReplayBuffer
 from utils.wrappers import MaxAndSkipEnv, PreproWrapper
@@ -67,13 +67,12 @@ class Trainer:
         replay_buffer = ReplayBuffer(
             self.config.buffer_size, self.config.history_length
         )
-        rewards = deque(maxlen=1000)
+        rewards = deque(maxlen=100)
         max_q_values = deque(maxlen=1000)
         q_values = deque(maxlen=1000)
 
         t = last_eval = last_record = 0
-        scores_eval = []
-        scores_eval += [self.evaluate()]
+        self.eval_reward = self.evaluate()
 
         bar = ProgressBar(target=self.config.num_steps_train)
 
@@ -100,19 +99,17 @@ class Trainer:
                 state, reward, done, info = self.env.step(action)
                 replay_buffer.store_effect(frame_index, action, reward, done)
 
-                loss_eval, grad_eval = self.train_step(
-                    t, replay_buffer, lr_schedule.alpha
-                )
+                loss_eval, grad_eval = self.train_step(t, replay_buffer, lr_schedule.lr)
 
                 if (
                     t > self.config.learning_start
                     and t % self.config.learning_freq == 0
                 ):
                     exp_schedule.update_epsilon(t)
-                    lr_schedule.update_alpha(t)
+                    lr_schedule.update_lr(t)
 
                 if t > self.config.learning_start and t % self.config.log_freq == 0:
-                    self.update_averages(rewards, max_q_values, q_values, scores_eval)
+                    self.update_averages(rewards, max_q_values, q_values)
                     self.add_summary(loss_eval, grad_eval, t)
                     if len(rewards) > 0:
                         bar.update(
@@ -122,7 +119,7 @@ class Trainer:
                                 ("Max R", np.max(rewards)),
                                 ("Max Q", self.max_q),
                                 ("Epsilon", exp_schedule.epsilon),
-                                ("Alpha", lr_schedule.alpha),
+                                ("Alpha", lr_schedule.lr),
                                 ("Loss", loss_eval),
                                 ("Grads", grad_eval),
                             ],
@@ -145,7 +142,7 @@ class Trainer:
 
             if t > self.config.learning_start and last_eval > self.config.eval_freq:
                 last_eval = 0
-                scores_eval += [self.evaluate()]
+                self.eval_reward = self.evaluate()
 
             if (
                 t > self.config.learning_start
@@ -157,16 +154,14 @@ class Trainer:
 
         self.logger.info("- Training done.")
         self.save_parameters()
-        scores_eval += [self.evaluate()]
-        export_plot(scores_eval, "Scores", self.config.plot_output)
 
     def train_step(
-        self, t: int, replay_buffer: ReplayBuffer, alpha: float
+        self, t: int, replay_buffer: ReplayBuffer, lr: float
     ) -> Tuple[int, int]:
         loss_eval, grad_eval = 0, 0
 
         if t > self.config.learning_start and t % self.config.learning_freq == 0:
-            loss_eval, grad_eval = self.dqn.update_params(replay_buffer, alpha)
+            loss_eval, grad_eval = self.dqn.update_params(replay_buffer, lr)
 
         if t % self.config.target_update_freq == 0:
             self.dqn.synchronize_networks()
@@ -239,7 +234,7 @@ class Trainer:
         self.evaluate(env, 1)
 
     def update_averages(
-        self, rewards: Deque, max_q_values: Deque, q_values: Deque, scores_eval: List
+        self, rewards: Deque, max_q_values: Deque, q_values: Deque
     ) -> None:
         self.avg_reward = np.mean(rewards)
         self.max_reward = np.max(rewards)
@@ -248,9 +243,6 @@ class Trainer:
         self.max_q = np.mean(max_q_values)
         self.avg_q = np.mean(q_values)
         self.std_q = np.sqrt(np.var(q_values) / len(q_values))
-
-        if len(scores_eval) > 0:
-            self.eval_reward = scores_eval[-1]
 
     def add_summary(self, latest_loss: int, latest_total_norm: int, t: int) -> None:
         self.summary_writer.add_scalar("Loss", latest_loss, t)

@@ -4,26 +4,6 @@ import logging
 from typing import List
 
 import numpy as np
-import matplotlib
-
-matplotlib.use("agg")
-import matplotlib.pyplot as plt
-
-
-def export_plot(ys, ylabel, filename):
-    """
-    Export a plot in filename
-
-    Args:
-        ys: (list) of float / int to plot
-        filename: (string) directory
-    """
-    plt.figure()
-    plt.plot(range(len(ys)), ys)
-    plt.xlabel("Epoch")
-    plt.ylabel(ylabel)
-    plt.savefig(filename)
-    plt.close()
 
 
 def get_logger(filename):
@@ -42,9 +22,8 @@ def get_logger(filename):
 
 
 class ProgressBar(object):
-    """Copied from keras (https://github.com/fchollet/keras/)
-
-    Displays a progress bar.
+    """
+    Copied from keras (https://github.com/fchollet/keras/)
     """
 
     def __init__(self, target, width=30, verbose=1):

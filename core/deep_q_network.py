@@ -191,9 +191,7 @@ class DeepQNetwork:
         else:
             return self.get_best_action(state)[0]
 
-    def update_params(
-        self, replay_buffer: ReplayBuffer, alpha: float
-    ) -> Tuple[int, int]:
+    def update_params(self, replay_buffer: ReplayBuffer, lr: float) -> Tuple[int, int]:
         s_batch, a_batch, r_batch, sp_batch, done_mask_batch = replay_buffer.sample(
             self.config.batch_size
         )
@@ -225,7 +223,7 @@ class DeepQNetwork:
         )
 
         for group in self.optimizer.param_groups:
-            group["lr"] = alpha
+            group["lr"] = lr
         self.optimizer.step()
         return loss.item(), total_norm.item()
 

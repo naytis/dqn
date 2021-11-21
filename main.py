@@ -21,11 +21,11 @@ if __name__ == "__main__":
     )
 
     exp_schedule = ExplorationSchedule(
-        env, config.epsilon_init, config.epsilon_end, config.epsilon_interp_limit
+        env, config.epsilon_init, config.epsilon_final, config.epsilon_interp_limit
     )
 
     lr_schedule = LearningRateSchedule(
-        config.alpha_init, config.alpha_end, config.alpha_interp_limit
+        config.lr_init, config.lr_final, config.lr_interp_limit
     )
 
     trainer = Trainer(env, config)
