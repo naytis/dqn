@@ -31,9 +31,9 @@ class Config(object):
     learning_freq = 4
     history_length = 4
     skip_frame = 4
-    lr_init = 0.0001
-    lr_final = 0.00002
-    lr_interp_limit = 1000000
+    lr_init = 0.00025
+    lr_final = 0.00005
+    lr_interp_limit = 5000000
     epsilon_init = 1
     epsilon_final = 0.1
     epsilon_interp_limit = 1000000

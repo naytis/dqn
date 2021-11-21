@@ -47,7 +47,7 @@ class DeepQNetwork:
 
         self.q_network = self.q_network.to(self.device)
         self.target_network = self.target_network.to(self.device)
-        self.optimizer = optim.Adam(self.q_network.parameters())
+        self.optimizer = optim.RMSprop(self.q_network.parameters())
 
     def initialize_models(self):
         state_shape = list(self.env.observation_space.shape)
