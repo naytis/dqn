@@ -110,18 +110,7 @@ class DeepQNetwork:
     def get_q_values(
         self, state: Tensor, network: NetworkType = NetworkType.Q_NETWORK
     ) -> Tensor:
-        """
-        Args:
-            state:
-                shape = (batch_size, img height, img width, nchannels x config.state_history)
-            network:
-                The name of the network
-
-        Returns:
-            out: shape = (batch_size, num_actions)
-        """
         out = None
-        state = state.permute(0, 3, 1, 2)
 
         if network == NetworkType.Q_NETWORK:
             out = self.q_network(state)
@@ -162,16 +151,17 @@ class DeepQNetwork:
 
     def process_state(self, state: Tensor) -> Tensor:
         """
-        State placeholders are tf.uint8 for fast transfer to GPU
-        Need to cast it to float32 for the rest of the tf graph.
+        State placeholders are uint8 for fast transfer to GPU
+        Need to cast it to float32 for the rest of the graph.
 
         Args:
-            state: node of tf graph of shape = (batch_size, height, width, nchannels)
-                    of type tf.uint8.
+            state: node of graph of shape = (batch_size, height, width, nchannels)
+                    of type uint8.
                     if , values are between 0 and 255 -> 0 and 1
         """
         state = state.float()
         state /= self.config.high
+        state = state.permute(0, 3, 1, 2)
 
         return state
 
