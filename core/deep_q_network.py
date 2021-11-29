@@ -1,4 +1,3 @@
-import enum
 from collections import OrderedDict
 from typing import Tuple, Type
 
@@ -9,11 +8,6 @@ from torch import Tensor, nn, optim, functional
 
 from config import Config
 from utils.replay_buffer import ReplayBuffer
-
-
-class NetworkType(enum.Enum):
-    Q_NETWORK = "q_network"
-    TARGET_NETWORK = "target_network"
 
 
 class DeepQNetwork:
@@ -108,18 +102,6 @@ class DeepQNetwork:
         self.q_network = nn.Sequential(layers)
         self.target_network = nn.Sequential(layers)
 
-    def get_q_values(
-        self, state: Tensor, network: NetworkType = NetworkType.Q_NETWORK
-    ) -> Tensor:
-        out = None
-
-        if network == NetworkType.Q_NETWORK:
-            out = self.q_network(state)
-        elif network == NetworkType.TARGET_NETWORK:
-            out = self.target_network(state)
-
-        return out
-
     def calc_loss(
         self,
         q_values: Tensor,
@@ -168,10 +150,10 @@ class DeepQNetwork:
 
     def get_best_action(self, state: Tensor) -> Tuple[int, np.ndarray]:
         with torch.no_grad():
-            s = torch.tensor(state, dtype=torch.uint8, device=self.device).unsqueeze(0)
-            s = self.process_state(s)
+            state = torch.tensor(state, dtype=torch.uint8, device=self.device).unsqueeze(0)
+            state = self.process_state(state)
             action_values: np.ndarray = (
-                self.get_q_values(s, NetworkType.Q_NETWORK).squeeze().to("cpu").tolist()
+                self.q_network(state).squeeze().to("cpu").tolist()
             )
         best_action: int = np.argmax(action_values)
         return best_action, action_values
@@ -198,11 +180,11 @@ class DeepQNetwork:
         self.optimizer.zero_grad()
 
         s = self.process_state(s_batch)
-        q_values = self.get_q_values(s, NetworkType.Q_NETWORK)
+        q_values = self.q_network(s)
 
         with torch.no_grad():
             sp = self.process_state(sp_batch)
-            target_q_values = self.get_q_values(sp, NetworkType.TARGET_NETWORK)
+            target_q_values = self.target_network(sp)
 
         loss = self.calc_loss(
             q_values, target_q_values, a_batch, r_batch, done_mask_batch
