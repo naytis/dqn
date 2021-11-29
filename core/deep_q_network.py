@@ -4,11 +4,8 @@ from typing import Tuple, Type
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.tensor import Tensor
 from gym import Env as GymEnv
+from torch import Tensor, nn, optim, functional
 
 from config import Config
 from utils.replay_buffer import ReplayBuffer
@@ -24,6 +21,7 @@ class DeepQNetwork:
         self.q_network = None
         self.target_network = None
         self.optimizer = None
+
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Running model on device {self.device}")
 
@@ -47,7 +45,10 @@ class DeepQNetwork:
 
         self.q_network = self.q_network.to(self.device)
         self.target_network = self.target_network.to(self.device)
-        self.optimizer = optim.RMSprop(self.q_network.parameters())
+        self.optimizer = optim.Adam(
+            self.q_network.parameters(),
+            lr=self.config.learning_rate,
+        )
 
     def initialize_models(self):
         state_shape = list(self.env.observation_space.shape)
@@ -146,8 +147,8 @@ class DeepQNetwork:
             * self.config.gamma
             * torch.max(target_q_values, dim=1).values
         )
-        q_sa = q_values[range(len(q_values)), actions.type(torch.LongTensor)]
-        return F.mse_loss(q_target, q_sa)
+        q_current = q_values[range(len(q_values)), actions.type(torch.LongTensor)]
+        return functional.F.huber_loss(q_target, q_current)
 
     def process_state(self, state: Tensor) -> Tensor:
         """
@@ -181,7 +182,7 @@ class DeepQNetwork:
         else:
             return self.get_best_action(state)[0]
 
-    def update_params(self, replay_buffer: ReplayBuffer, lr: float) -> Tuple[int, int]:
+    def update_params(self, replay_buffer: ReplayBuffer) -> Tuple[int, int]:
         s_batch, a_batch, r_batch, sp_batch, done_mask_batch = replay_buffer.sample(
             self.config.batch_size
         )
@@ -208,12 +209,10 @@ class DeepQNetwork:
         )
         loss.backward()
 
-        total_norm = torch.nn.utils.clip_grad_norm_(
+        total_norm = nn.utils.clip_grad_norm_(
             self.q_network.parameters(), self.config.clip_val
         )
 
-        for group in self.optimizer.param_groups:
-            group["lr"] = lr
         self.optimizer.step()
         return loss.item(), total_norm.item()
 

@@ -81,7 +81,7 @@ class ProgressBar(object):
                 info += " - %ds" % (now - self.start)
             for k in self.unique_values:
                 if type(self.sum_values[k]) is list:
-                    info += " - %s: %.6f" % (
+                    info += " - %s: %.4f" % (
                         k,
                         self.sum_values[k][0] / max(1, self.sum_values[k][1]),
                     )
