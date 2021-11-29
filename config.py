@@ -1,5 +1,4 @@
 class Config(object):
-    # env config
     env_name = "Pong-v0"
     high = 255.0
 
@@ -32,3 +31,6 @@ class Config(object):
     epsilon_final = 0.1
     epsilon_interp_limit = 1000000
     learning_start = 50000
+
+
+config = Config

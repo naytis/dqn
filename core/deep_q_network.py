@@ -136,21 +136,17 @@ class DeepQNetwork:
         """
         State placeholders are uint8 for fast transfer to GPU
         Need to cast it to float32 for the rest of the graph.
-
-        Args:
-            state: node of graph of shape = (batch_size, height, width, nchannels)
-                    of type uint8.
-                    if , values are between 0 and 255 -> 0 and 1
         """
         state = state.float()
         state /= self.config.high
-        state = state.permute(0, 3, 1, 2)
 
         return state
 
     def get_best_action(self, state: Tensor) -> Tuple[int, np.ndarray]:
         with torch.no_grad():
-            state = torch.tensor(state, dtype=torch.uint8, device=self.device).unsqueeze(0)
+            state = torch.tensor(
+                state, dtype=torch.uint8, device=self.device
+            ).unsqueeze(0)
             state = self.process_state(state)
             action_values: np.ndarray = (
                 self.q_network(state).squeeze().to("cpu").tolist()

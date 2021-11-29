@@ -1,23 +1,12 @@
-import gym
-
 from core.trainer import Trainer
-from utils.preprocess import greyscale
-from utils.wrappers import PreproWrapper, MaxAndSkipEnv
+from utils.wrappers import make_env
 
 from core.schedule import ExplorationSchedule
 
-from config import Config
+from config import config
 
 if __name__ == "__main__":
-    config = Config
-
-    env = gym.make(config.env_name)
-    env = MaxAndSkipEnv(env, skip=config.skip_frame)
-    env = PreproWrapper(
-        env,
-        prepro=greyscale,
-        shape=(80, 80, 1),
-    )
+    env = make_env(config.env_name)
 
     exp_schedule = ExplorationSchedule(
         env, config.epsilon_init, config.epsilon_final, config.epsilon_interp_limit

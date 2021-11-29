@@ -15,7 +15,7 @@ from core.schedule import ExplorationSchedule
 from utils.general import ProgressBar, get_logger
 from utils.preprocess import greyscale
 from utils.replay_buffer import ReplayBuffer
-from utils.wrappers import MaxAndSkipEnv, PreproWrapper
+from utils.wrappers import make_env
 
 
 class Trainer:
@@ -131,10 +131,7 @@ class Trainer:
                 last_eval = 0
                 self.eval_reward = self.evaluate()
 
-            if (
-                t > self.config.learning_start
-                and last_record > self.config.record_freq
-            ):
+            if t > self.config.learning_start and last_record > self.config.record_freq:
                 last_record = 0
                 self.record()
 
@@ -199,18 +196,11 @@ class Trainer:
 
     def record(self) -> None:
         self.logger.info("Recording...")
-        env = gym.make(self.config.env_name)
+        env = make_env(self.config.env_name)
         env = gym.wrappers.Monitor(
             env,
             self.config.record_path,
             resume=True,
-        )
-        env = MaxAndSkipEnv(env, skip=self.config.skip_frame)
-        env = PreproWrapper(
-            env,
-            prepro=greyscale,
-            shape=(80, 80, 1),
-            overwrite_render=self.config.overwrite_render,
         )
         self.evaluate(env, 1)
 
