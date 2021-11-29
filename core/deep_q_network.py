@@ -139,6 +139,7 @@ class DeepQNetwork:
         """
         state = state.float()
         state /= self.config.high
+        state = state.permute(0, 3, 1, 2)
 
         return state
 

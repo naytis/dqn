@@ -99,5 +99,5 @@ def make_env(env_name):
     env = FireResetEnv(env)
     env = MaxAndSkipEnv(env, skip=config.skip_frame)
     env = WarpFrame(env)
-    env = ReshapeImageToPyTorch(env)
+    # env = ReshapeImageToPyTorch(env)
     return env
