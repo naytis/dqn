@@ -1,7 +1,7 @@
 import os
 import sys
 from collections import deque
-from typing import Deque, List, Type, Tuple
+from typing import Deque, Type, Tuple
 
 import gym
 import numpy as np
@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from config import Config
 from core.deep_q_network import DeepQNetwork
-from core.schedule import ExplorationSchedule, LearningRateSchedule
+from core.schedule import ExplorationSchedule
 from utils.general import ProgressBar, get_logger
 from utils.preprocess import greyscale
 from utils.replay_buffer import ReplayBuffer
@@ -48,22 +48,13 @@ class Trainer:
 
         self.eval_reward = 0
 
-    def run(
-        self, exp_schedule: ExplorationSchedule, lr_schedule: LearningRateSchedule
-    ) -> None:
+    def run(self, exp_schedule: ExplorationSchedule) -> None:
         self.dqn.synchronize_networks()
+        self.record()
+        self.train(exp_schedule)
+        self.record()
 
-        if self.config.record:
-            self.record()
-
-        self.train(exp_schedule, lr_schedule)
-
-        if self.config.record:
-            self.record()
-
-    def train(
-        self, exp_schedule: ExplorationSchedule, lr_schedule: LearningRateSchedule
-    ) -> None:
+    def train(self, exp_schedule: ExplorationSchedule) -> None:
         replay_buffer = ReplayBuffer(
             self.config.buffer_size, self.config.history_length
         )
@@ -84,8 +75,6 @@ class Trainer:
                 t += 1
                 last_eval += 1
                 last_record += 1
-                if self.config.render_train:
-                    self.env.render()
 
                 frame_index = replay_buffer.store_frame(state)
                 dqn_input = replay_buffer.encode_recent_observation()
@@ -99,14 +88,13 @@ class Trainer:
                 state, reward, done, info = self.env.step(action)
                 replay_buffer.store_effect(frame_index, action, reward, done)
 
-                loss_eval, grad_eval = self.train_step(t, replay_buffer, lr_schedule.lr)
+                loss_eval, grad_eval = self.train_step(t, replay_buffer)
 
                 if (
                     t > self.config.learning_start
                     and t % self.config.learning_freq == 0
                 ):
                     exp_schedule.update_epsilon(t)
-                    lr_schedule.update_lr(t)
 
                 if t > self.config.learning_start and t % self.config.log_freq == 0:
                     self.update_averages(rewards, max_q_values, q_values)
@@ -115,13 +103,12 @@ class Trainer:
                         bar.update(
                             t + 1,
                             exact=[
-                                ("Avg R", self.avg_reward),
-                                ("Max R", np.max(rewards)),
-                                ("Max Q", self.max_q),
-                                ("Epsilon", exp_schedule.epsilon),
-                                ("Alpha", lr_schedule.lr),
-                                ("Loss", loss_eval),
-                                ("Grads", grad_eval),
+                                ("avg r", self.avg_reward),
+                                ("max r", np.max(rewards)),
+                                ("max q", self.max_q),
+                                ("eps", exp_schedule.epsilon),
+                                ("loss", loss_eval),
+                                ("grads", grad_eval),
                             ],
                             base=self.config.learning_start,
                         )
@@ -146,7 +133,6 @@ class Trainer:
 
             if (
                 t > self.config.learning_start
-                and self.config.record
                 and last_record > self.config.record_freq
             ):
                 last_record = 0
@@ -155,13 +141,11 @@ class Trainer:
         self.logger.info("- Training done.")
         self.save_parameters()
 
-    def train_step(
-        self, t: int, replay_buffer: ReplayBuffer, lr: float
-    ) -> Tuple[int, int]:
+    def train_step(self, t: int, replay_buffer: ReplayBuffer) -> Tuple[int, int]:
         loss_eval, grad_eval = 0, 0
 
         if t > self.config.learning_start and t % self.config.learning_freq == 0:
-            loss_eval, grad_eval = self.dqn.update_params(replay_buffer, lr)
+            loss_eval, grad_eval = self.dqn.update_params(replay_buffer)
 
         if t % self.config.target_update_freq == 0:
             self.dqn.synchronize_networks()
@@ -173,7 +157,7 @@ class Trainer:
 
     def evaluate(self, env=None, num_episodes=None) -> float:
         if num_episodes is None:
-            self.logger.info("\nEvaluating...")
+            self.logger.info("Evaluating...")
             num_episodes = self.config.num_episodes_test
 
         if env is None:
@@ -188,9 +172,6 @@ class Trainer:
             total_reward = 0
             state = env.reset()
             while True:
-                if self.config.render_test:
-                    env.render()
-
                 index = replay_buffer.store_frame(state)
                 q_input = replay_buffer.encode_recent_observation()
 
