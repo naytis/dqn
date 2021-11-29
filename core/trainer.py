@@ -12,8 +12,8 @@ from torch.utils.tensorboard import SummaryWriter
 from config import Config
 from core.deep_q_network import DeepQNetwork
 from core.schedule import ExplorationSchedule
-from utils.general import ProgressBar, get_logger
-from utils.preprocess import greyscale
+from utils.progress_bar import ProgressBar
+from utils.logger import get_logger
 from utils.replay_buffer import ReplayBuffer
 from utils.wrappers import make_env
 
@@ -36,7 +36,7 @@ class Trainer:
         self.env = env
         self.dqn = DeepQNetwork(env, config)
 
-        self.summary_writer = SummaryWriter(self.config.output_path, max_queue=1e5)
+        self.summary_writer = SummaryWriter(self.config.output_path, max_queue=int(1e5))
 
         self.avg_reward = 0
         self.max_reward = 0

@@ -1,29 +1,13 @@
 import time
 import sys
-import logging
 from typing import List
 
 import numpy as np
 
 
-def get_logger(filename):
-    """
-    Return a logger instance to a file
-    """
-    logger = logging.getLogger("logger")
-    logger.setLevel(logging.DEBUG)
-    logging.basicConfig(format="%(message)s", level=logging.DEBUG)
-    handler = logging.FileHandler(filename)
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s: %(message)s"))
-    logging.getLogger().addHandler(handler)
-    logging.getLogger("matplotlib").setLevel(logging.ERROR)
-    return logger
-
-
 class ProgressBar(object):
     """
-    Copied from keras (https://github.com/fchollet/keras/)
+    Taken from keras (https://github.com/fchollet/keras/)
     """
 
     def __init__(self, target, width=30, verbose=1):
