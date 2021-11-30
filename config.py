@@ -1,4 +1,4 @@
-class Config(object):
+class BaseConfig(object):
     env_name = "Pong-v0"
 
     # output config
@@ -11,7 +11,6 @@ class Config(object):
     num_episodes_test = 50
     clip_val = 10
     saving_freq = 500000
-    log_freq = 250
     eval_freq = 250000
     record_freq = 500000
     soft_epsilon = 0.05
@@ -32,4 +31,12 @@ class Config(object):
     learning_start = 50000
 
 
-config = Config
+class DevConfig(BaseConfig):
+    num_steps_train = 5000000
+    buffer_size = 100000
+    learning_start = 100000
+    target_update_freq = 1000
+    epsilon_interp_limit = 500000
+
+
+config = DevConfig

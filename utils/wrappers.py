@@ -4,6 +4,7 @@ import gym
 from gym import spaces
 
 from config import config
+from utils.benchmark_monitor import BenchmarkMonitor
 
 """
 Taken from OpenAI baselines
@@ -87,27 +88,12 @@ class WarpFrame(gym.ObservationWrapper):
         return frame[:, :, None]
 
 
-class ReshapeImageToPyTorch(gym.ObservationWrapper):
-    def __init__(self, env):
-        gym.ObservationWrapper.__init__(self, env)
-        old_shape = self.observation_space.shape
-        self.observation_space = gym.spaces.Box(
-            low=0,
-            high=255,
-            shape=(old_shape[-1], old_shape[0], old_shape[1]),
-            dtype=env.observation_space.dtype,
-        )
-
-    def observation(self, observation):
-        return np.moveaxis(observation, 2, 0)
-
-
 def wrap(env):
+    env = BenchmarkMonitor(env)
     env = FireResetEnv(env)
     env = MaxAndSkipEnv(env, skip=config.skip_frame)
     env = ClipRewardEnv(env)
     env = WarpFrame(env)
-    # env = ReshapeImageToPyTorch(env)
     return env
 
 
@@ -119,6 +105,8 @@ def make_env(env_name):
 
 def make_evaluation_env(env_name):
     env = gym.make(env_name)
-    env = gym.wrappers.Monitor(env, config.record_path, video_callable=lambda x: True, resume=True)
+    env = gym.wrappers.Monitor(
+        env, config.record_path, video_callable=lambda x: True, resume=True
+    )
     env = wrap(env)
     return env
