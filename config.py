@@ -1,6 +1,5 @@
 class Config(object):
     env_name = "Pong-v0"
-    high = 255.0
 
     # output config
     output_path = "results/" + env_name + "/"

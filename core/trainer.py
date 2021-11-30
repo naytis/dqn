@@ -3,7 +3,6 @@ import sys
 from collections import deque
 from typing import Deque, Type, Tuple
 
-import gym
 import numpy as np
 import torch
 from gym import Env as GymEnv
@@ -15,7 +14,7 @@ from core.schedule import ExplorationSchedule
 from utils.progress_bar import ProgressBar
 from utils.logger import get_logger
 from utils.replay_buffer import ReplayBuffer
-from utils.wrappers import make_env
+from utils.wrappers import make_evaluation_env
 
 
 class Trainer:
@@ -196,12 +195,7 @@ class Trainer:
 
     def record(self) -> None:
         self.logger.info("Recording...")
-        env = make_env(self.config.env_name)
-        env = gym.wrappers.Monitor(
-            env,
-            self.config.record_path,
-            resume=True,
-        )
+        env = make_evaluation_env(self.config.env_name)
         self.evaluate(env, 1)
 
     def update_averages(

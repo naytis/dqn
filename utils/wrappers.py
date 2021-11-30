@@ -59,6 +59,14 @@ class MaxAndSkipEnv(gym.Wrapper):
         return self.env.reset(**kwargs)
 
 
+class ClipRewardEnv(gym.RewardWrapper):
+    def __init__(self, env):
+        gym.RewardWrapper.__init__(self, env)
+
+    def reward(self, reward):
+        return np.sign(reward)
+
+
 class WarpFrame(gym.ObservationWrapper):
     def __init__(self, env):
         gym.ObservationWrapper.__init__(self, env)
@@ -94,10 +102,23 @@ class ReshapeImageToPyTorch(gym.ObservationWrapper):
         return np.moveaxis(observation, 2, 0)
 
 
-def make_env(env_name):
-    env = gym.make(env_name)
+def wrap(env):
     env = FireResetEnv(env)
     env = MaxAndSkipEnv(env, skip=config.skip_frame)
+    env = ClipRewardEnv(env)
     env = WarpFrame(env)
     # env = ReshapeImageToPyTorch(env)
+    return env
+
+
+def make_env(env_name):
+    env = gym.make(env_name)
+    env = wrap(env)
+    return env
+
+
+def make_evaluation_env(env_name):
+    env = gym.make(env_name)
+    env = gym.wrappers.Monitor(env, config.record_path, video_callable=lambda x: True, resume=True)
+    env = wrap(env)
     return env

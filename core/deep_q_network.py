@@ -138,7 +138,7 @@ class DeepQNetwork:
         Need to cast it to float32 for the rest of the graph.
         """
         state = state.float()
-        state /= self.config.high
+        state /= 255.0
         state = state.permute(0, 3, 1, 2)
 
         return state
