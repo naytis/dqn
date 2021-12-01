@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Tuple
+from typing import Tuple, Union
 
 import gym
 import numpy as np
@@ -9,10 +9,10 @@ from torch import optim, functional, Tensor
 
 from config import config
 from core.agent import Agent, NetworkType
-from core.schedule import ExplorationSchedule
 from utils.benchmark_monitor import BenchmarkMonitor
-from utils.logger import get_logger
 from utils.metrics import Metrics
+from core.schedule import ExplorationSchedule
+from utils.logger import get_logger
 from utils.replay_buffer import ReplayBuffer
 from utils.wrappers import make_evaluation_env
 
@@ -20,7 +20,7 @@ from utils.wrappers import make_evaluation_env
 class Trainer:
     def __init__(
         self,
-        env: gym.Env,
+        env: Union[gym.Env, BenchmarkMonitor],
     ):
         if not os.path.exists(config.output_path):
             os.makedirs(config.output_path)
@@ -83,8 +83,8 @@ class Trainer:
                     self.exp_schedule.update_epsilon(t)
 
                 if done:  # or t >= config.num_steps_train: # todo
-                    episode_reward = info["episode"]["r"]
-                    self.metrics.episode_length.append(info["episode"]["l"])
+                    episode_reward = self.env.get_episode_rewards()
+                    self.metrics.episode_length.append(self.env.get_episode_lengths())
                     self.metrics.episodes_counter += 1
 
                     if t > config.learning_start:
@@ -206,7 +206,7 @@ class Trainer:
                 evaluation_replay_buffer.store_effect(index, action, reward, done)
 
                 if done:
-                    episode_reward = info["episode"]["r"]
+                    episode_reward = self.env.get_episode_rewards()
                     break
 
             rewards.append(episode_reward)
