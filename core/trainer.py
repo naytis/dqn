@@ -1,19 +1,18 @@
 import os
 import sys
-from collections import deque
-from typing import Deque, Tuple, List
+from typing import Tuple
 
 import gym
 import numpy as np
 import torch
 from torch import optim, functional, Tensor
-from torch.utils.tensorboard import SummaryWriter
 
 from config import config
 from core.agent import Agent, NetworkType
 from core.schedule import ExplorationSchedule
+from utils.benchmark_monitor import BenchmarkMonitor
 from utils.logger import get_logger
-from utils.progress_bar import ProgressBar
+from utils.metrics import Metrics
 from utils.replay_buffer import ReplayBuffer
 from utils.wrappers import make_evaluation_env
 
@@ -28,6 +27,7 @@ class Trainer:
 
         self.env = env
         self.logger = get_logger(config.log_path)
+        self.metrics = Metrics()
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Running model on device {self.device}")
@@ -45,18 +45,6 @@ class Trainer:
             lr=config.learning_rate,
         )
 
-        self.summary_writer = SummaryWriter(config.output_path, max_queue=int(1e5))
-
-        self.avg_reward = 0
-        self.max_reward = 0
-        self.std_reward = 0
-
-        self.avg_q = 0
-        self.max_q = 0
-        self.std_q = 0
-
-        self.eval_reward = 0
-
     def run(self) -> None:
         self.agent.synchronize_networks()
         self.record()
@@ -64,16 +52,8 @@ class Trainer:
         self.record()
 
     def train(self) -> None:
-        rewards = deque(maxlen=50)  # rewards for last 50 episodes
-        max_q_values = deque(maxlen=1000)  # q values for last 1000 timesteps
-        q_values_list = deque(maxlen=1000)  # q values for last 1000 timesteps
-        episode_length = deque(maxlen=50)
-        episodes_counter = 0
-
         t = last_eval = last_record = 0
-        self.eval_reward = self.evaluate()
-
-        bar = ProgressBar(target=config.num_steps_train)
+        self.metrics.eval_reward = self.evaluate()
 
         while t < config.num_steps_train:
             state = self.env.reset()
@@ -91,45 +71,26 @@ class Trainer:
                 )
                 action = self.agent.get_action(dqn_input, self.exp_schedule.epsilon)
 
-                max_q_values.append(max(q_values))
-                q_values_list += list(q_values)
+                self.metrics.max_q_values.append(max(q_values))
+                self.metrics.q_values_deque += list(q_values)
 
                 state, reward, done, info = self.env.step(action)
                 self.replay_buffer.store_effect(frame_index, action, reward, done)
 
-                loss_eval, grad_eval = self.train_step(t)
+                self.metrics.loss_eval, self.metrics.grad_eval = self.train_step(t)
 
                 if t > config.learning_start and t % config.learning_freq == 0:
                     self.exp_schedule.update_epsilon(t)
 
-                if done: # or t >= config.num_steps_train: # todo
+                if done:  # or t >= config.num_steps_train: # todo
                     episode_reward = info["episode"]["r"]
-                    episode_length.append(info["episode"]["l"])
-                    episodes_counter += 1
+                    self.metrics.episode_length.append(info["episode"]["l"])
+                    self.metrics.episodes_counter += 1
 
                     if t > config.learning_start:
-                        self.update_metrics(rewards, max_q_values, q_values_list)
-                        self.add_summary(
-                            latest_loss=loss_eval,
-                            latest_total_norm=grad_eval,
-                            episodes_counter=episodes_counter,
-                            episode_length=episode_length,
-                            t=t,
-                        )
-                        if len(rewards) > 0:
-                            bar.update(
-                                t + 1,
-                                exact=[
-                                    ("episodes", episodes_counter),
-                                    ("avg r", self.avg_reward),
-                                    ("max r", np.max(rewards)),
-                                    ("max q", self.max_q),
-                                    ("eps", self.exp_schedule.epsilon),
-                                    ("loss", loss_eval),
-                                    ("grads", grad_eval),
-                                ],
-                                base=config.learning_start,
-                            )
+                        self.metrics.update_metrics()
+                        self.metrics.add_summary(t)
+                        self.metrics.update_bar(self.exp_schedule.epsilon, t)
                     elif t < config.learning_start:
                         sys.stdout.write(
                             "\rPopulating the memory {}/{}...".format(
@@ -137,14 +98,14 @@ class Trainer:
                             )
                         )
                         sys.stdout.flush()
-                        bar.reset_start()
+                        self.metrics.reset_bar()
                     break
 
-            rewards.append(episode_reward)
+            self.metrics.rewards.append(episode_reward)
 
             if t > config.learning_start and last_eval > config.eval_freq:
                 last_eval = 0
-                self.eval_reward = self.evaluate()
+                self.metrics.eval_reward = self.evaluate()
 
             if t > config.learning_start and last_record > config.record_freq:
                 last_record = 0
@@ -196,11 +157,9 @@ class Trainer:
             q_values, target_q_values, a_batch, r_batch, done_mask_batch
         )
         loss.backward()
-
         total_norm = torch.nn.utils.clip_grad_norm_(
             self.agent.parameters(), config.clip_val
         )
-
         self.optimizer.step()
 
         return loss.item(), total_norm.item()
@@ -247,13 +206,13 @@ class Trainer:
                 evaluation_replay_buffer.store_effect(index, action, reward, done)
 
                 if done:
-                    episode_reward = info['episode']['r']
+                    episode_reward = info["episode"]["r"]
                     break
 
             rewards.append(episode_reward)
 
         avg_reward = np.mean(rewards)
-        sigma_reward = np.sqrt(np.var(rewards) / len(rewards))
+        sigma_reward = np.std(rewards)
 
         if num_episodes > 1:
             msg = "Average reward: {:04.2f} +/- {:04.2f}".format(
@@ -267,37 +226,6 @@ class Trainer:
         self.logger.info("Recording...")
         env = make_evaluation_env(config.env_name)
         self.evaluate(env, 1)
-
-    def update_metrics(
-        self, rewards: Deque, max_q_values: Deque, q_values: Deque
-    ) -> None:
-        self.avg_reward = np.mean(rewards)
-        self.max_reward = np.max(rewards)
-        self.std_reward = np.sqrt(np.var(rewards) / len(rewards))
-
-        self.max_q = np.mean(max_q_values)
-        self.avg_q = np.mean(q_values)
-        self.std_q = np.sqrt(np.var(q_values) / len(q_values))
-
-    def add_summary(
-        self,
-        latest_loss: int,
-        latest_total_norm: int,
-        episodes_counter: int,
-        episode_length: Deque,
-        t: int,
-    ) -> None:
-        self.summary_writer.add_scalar("Loss", latest_loss, t)
-        self.summary_writer.add_scalar("Gradients Norm", latest_total_norm, t)
-        self.summary_writer.add_scalar("Avg reward, 50 eps", self.avg_reward, t)
-        self.summary_writer.add_scalar("Max reward, 50 eps", self.max_reward, t)
-        self.summary_writer.add_scalar("Std reward", self.std_reward, t)
-        self.summary_writer.add_scalar("Avg Q, 1000 ts", self.avg_q, t)
-        self.summary_writer.add_scalar("Max Q, 1000 ts", self.max_q, t)
-        self.summary_writer.add_scalar("Std Q", self.std_q, t)
-        self.summary_writer.add_scalar("Avg evaluated reward", self.eval_reward, t)
-        self.summary_writer.add_scalar("Episodes played", episodes_counter, t)
-        self.summary_writer.add_scalar("Avg episodes length, 50 eps", np.mean(episode_length), t)
 
     def save_parameters(self) -> None:
         torch.save(
