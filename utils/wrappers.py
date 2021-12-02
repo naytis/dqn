@@ -1,9 +1,11 @@
+from typing import Union
+
 import cv2
 import numpy as np
 import gym
 from gym import spaces
 
-from config import config
+from config import DefaultConfig, NatureConfig, TestConfig
 from utils.benchmark_monitor import BenchmarkMonitor
 
 """
@@ -88,7 +90,12 @@ class WarpFrame(gym.ObservationWrapper):
         return frame[:, :, None]
 
 
-def wrap(env):
+def wrap(
+    env: gym.Env,
+    config,
+) -> Union[
+    gym.Env, BenchmarkMonitor, FireResetEnv, MaxAndSkipEnv, ClipRewardEnv, WarpFrame
+]:
     env = BenchmarkMonitor(env)
     env = FireResetEnv(env)
     env = MaxAndSkipEnv(env, skip=config.skip_frame)
@@ -97,16 +104,20 @@ def wrap(env):
     return env
 
 
-def make_env(env_name):
+def make_env(env_name: str, config: Union[DefaultConfig, NatureConfig, TestConfig]):
     env = gym.make(env_name)
-    env = wrap(env)
+    env = wrap(env, config)
     return env
 
 
-def make_evaluation_env(env_name):
+def make_evaluation_env(
+    env_name: str,
+    config: Union[DefaultConfig, NatureConfig, TestConfig],
+    record_path: str,
+):
     env = gym.make(env_name)
     env = gym.wrappers.Monitor(
-        env, config.record_path, video_callable=lambda x: True, resume=True
+        env, record_path, video_callable=lambda x: True, resume=True
     )
-    env = wrap(env)
+    env = wrap(env, config)
     return env

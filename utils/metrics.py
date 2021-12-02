@@ -3,13 +3,12 @@ from collections import deque
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-from config import config
 from utils.progress_bar import ProgressBar
 
 
 class Metrics:
-    def __init__(self):
-        self.summary_writer = SummaryWriter(config.output_path, max_queue=int(1e5))
+    def __init__(self, num_steps_train: int, learning_start: int, output_path: str):
+        self.summary_writer = SummaryWriter(output_path, max_queue=int(1e5))
 
         self.rewards = deque(maxlen=50)  # rewards for last 50 episodes
         self.max_q_values = deque(maxlen=1000)  # q values for last 1000 timesteps
@@ -30,7 +29,7 @@ class Metrics:
         self.loss_eval = 0
         self.grad_eval = 0
 
-        self.bar = ProgressBar(target=config.num_steps_train)
+        self.bar = ProgressBar(target=num_steps_train, base=learning_start)
 
     def update_metrics(self) -> None:
         self.avg_reward = np.mean(self.rewards)
@@ -69,7 +68,6 @@ class Metrics:
                     ("loss", self.loss_eval),
                     ("grads", self.grad_eval),
                 ],
-                base=config.learning_start,
             )
 
     def reset_bar(self):

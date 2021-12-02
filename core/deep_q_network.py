@@ -1,13 +1,19 @@
-from typing import List
+from typing import List, Union
 
 import torch
 from torch import nn
 
-from config import config
+from config import DefaultConfig, NatureConfig, TestConfig
 
 
 class DeepQNetwork(nn.Module):
-    def __init__(self, state_shape: List, num_actions: int, device: str):
+    def __init__(
+        self,
+        config: Union[DefaultConfig, NatureConfig, TestConfig],
+        state_shape: List,
+        num_actions: int,
+        device: str,
+    ):
         super().__init__()
 
         img_height, img_width, n_channels = state_shape

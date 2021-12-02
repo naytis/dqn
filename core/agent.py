@@ -1,11 +1,12 @@
 import enum
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 
 import gym
 import numpy as np
 import torch
 from torch import Tensor, nn
 
+from config import DefaultConfig, NatureConfig, TestConfig
 from core.deep_q_network import DeepQNetwork
 
 
@@ -15,19 +16,26 @@ class NetworkType(enum.Enum):
 
 
 class Agent:
-    def __init__(self, env: gym.Env, device: str):
+    def __init__(
+        self,
+        env: gym.Env,
+        config: Union[DefaultConfig, NatureConfig, TestConfig],
+        device: str,
+    ):
         self.q_network = None
         self.target_network = None
         self.env = env
         self.device = device
-        self.build_networks()
+        self.build_networks(config)
 
-    def build_networks(self) -> None:
+    def build_networks(self, config) -> None:
         state_shape = list(self.env.observation_space.shape)
         num_actions = self.env.action_space.n
 
-        self.q_network = DeepQNetwork(state_shape, num_actions, self.device)
-        self.target_network = DeepQNetwork(state_shape, num_actions, self.device)
+        self.q_network = DeepQNetwork(config, state_shape, num_actions, self.device)
+        self.target_network = DeepQNetwork(
+            config, state_shape, num_actions, self.device
+        )
 
         def init_weights(m):
             if hasattr(m, "weight"):

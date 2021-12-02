@@ -23,3 +23,7 @@ class ExplorationSchedule:
             if frame_number <= self.interp_limit
             else self.epsilon_final
         )
+
+    # @get
+    # def epsilon():
+    #   pass todo

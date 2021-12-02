@@ -10,7 +10,7 @@ class ProgressBar(object):
     Taken from keras (https://github.com/fchollet/keras/)
     """
 
-    def __init__(self, target, width=30, verbose=1):
+    def __init__(self, target, width=30, verbose=1, base=0):
         self.width = width
         self.target = target
         self.sum_values = {}
@@ -19,11 +19,12 @@ class ProgressBar(object):
         self.total_width = 0
         self.seen_so_far = 0
         self.verbose = verbose
+        self.base = base
 
     def reset_start(self):
         self.start = time.time()
 
-    def update(self, current: int, exact: List, base=0):
+    def update(self, current: int, exact: List):
         for k, v in exact:
             if k not in self.sum_values:
                 self.unique_values.append(k)
@@ -54,7 +55,7 @@ class ProgressBar(object):
             self.total_width = len(bar)
 
             if current:
-                time_per_unit = (now - self.start) / (current - base)
+                time_per_unit = (now - self.start) / (current - self.base)
             else:
                 time_per_unit = 0
             eta = time_per_unit * (self.target - current)

@@ -2,60 +2,74 @@ import os
 import sys
 from typing import Tuple, Union
 
-import gym
 import numpy as np
 import torch
 from torch import optim, functional, Tensor
 
-from config import config
+from config import DefaultConfig, NatureConfig, TestConfig
 from core.agent import Agent, NetworkType
-from utils.benchmark_monitor import BenchmarkMonitor
 from utils.metrics import Metrics
 from core.schedule import ExplorationSchedule
 from utils.logger import get_logger
 from utils.replay_buffer import ReplayBuffer
-from utils.wrappers import make_evaluation_env
+from utils.wrappers import make_evaluation_env, make_env
 
 
 class Trainer:
     def __init__(
-        self,
-        env: Union[gym.Env, BenchmarkMonitor],
+        self, env_name: str, config: Union[DefaultConfig, NatureConfig, TestConfig]
     ):
-        if not os.path.exists(config.output_path):
-            os.makedirs(config.output_path)
+        output_path = "results/" + env_name + "/"
+        log_path = output_path + "log.txt"
+        self.model_output = output_path + "model.weights"
+        self.record_path = output_path + "videos/"
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
 
-        self.env = env
-        self.logger = get_logger(config.log_path)
-        self.metrics = Metrics()
+        self.env_name = env_name
+        self.env = make_env(env_name, config)
+        self.config = config
+        self.logger = get_logger(log_path)
+        self.metrics = Metrics(
+            self.config.num_steps_train, self.config.learning_start, output_path
+        )
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Running model on device {self.device}")
 
-        self.agent = Agent(env, self.device)
+        self.agent = Agent(self.env, self.config, self.device)
 
-        self.replay_buffer = ReplayBuffer(config.buffer_size, config.history_length)
+        self.replay_buffer = ReplayBuffer(
+            self.config.buffer_size, self.config.history_length
+        )
 
         self.exp_schedule = ExplorationSchedule(
-            config.epsilon_init, config.epsilon_final, config.epsilon_interp_limit
+            self.config.epsilon_init,
+            self.config.epsilon_final,
+            self.config.epsilon_interp_limit,
         )
 
         self.optimizer = optim.Adam(
             self.agent.parameters(),
-            lr=config.learning_rate,
+            lr=self.config.learning_rate,
         )
 
     def run(self) -> None:
         self.agent.synchronize_networks()
-        self.record()
+
+        if self.config.record:
+            self.record()
+
         self.train()
-        self.record()
+
+        if self.config.record:
+            self.record()
 
     def train(self) -> None:
         t = last_eval = last_record = 0
         self.metrics.eval_reward = self.evaluate()
 
-        while t < config.num_steps_train:
+        while t < self.config.num_steps_train:
             state = self.env.reset()
 
             while True:
@@ -79,7 +93,10 @@ class Trainer:
 
                 self.metrics.loss_eval, self.metrics.grad_eval = self.train_step(t)
 
-                if t > config.learning_start and t % config.learning_freq == 0:
+                if (
+                    t > self.config.learning_start
+                    and t % self.config.learning_freq == 0
+                ):
                     self.exp_schedule.update_epsilon(t)
 
                 if done:  # or t >= config.num_steps_train: # todo
@@ -87,14 +104,14 @@ class Trainer:
                     self.metrics.episode_length.append(self.env.get_episode_lengths())
                     self.metrics.episodes_counter += 1
 
-                    if t > config.learning_start:
+                    if t > self.config.learning_start:
                         self.metrics.update_metrics()
                         self.metrics.add_summary(t)
                         self.metrics.update_bar(self.exp_schedule.epsilon, t)
-                    elif t < config.learning_start:
+                    elif t < self.config.learning_start:
                         sys.stdout.write(
                             "\rPopulating the memory {}/{}...".format(
-                                t, config.learning_start
+                                t, self.config.learning_start
                             )
                         )
                         sys.stdout.flush()
@@ -103,27 +120,33 @@ class Trainer:
 
             self.metrics.rewards.append(episode_reward)
 
-            if t > config.learning_start and last_eval > config.eval_freq:
+            if t > self.config.learning_start and last_eval > self.config.eval_freq:
                 last_eval = 0
                 self.metrics.eval_reward = self.evaluate()
 
-            if t > config.learning_start and last_record > config.record_freq:
+            if (
+                t > self.config.learning_start
+                and last_record > self.config.record_freq
+                and self.config.record
+            ):
                 last_record = 0
                 self.record()
 
         self.logger.info("- Training done.")
-        self.save_parameters()
+
+        if self.config.save_parameters:
+            self.save_parameters()
 
     def train_step(self, t: int) -> Tuple[int, int]:
         loss_eval, grad_eval = 0, 0
 
-        if t > config.learning_start and t % config.learning_freq == 0:
+        if t > self.config.learning_start and t % self.config.learning_freq == 0:
             loss_eval, grad_eval = self.update_params()
 
-        if t % config.target_update_freq == 0:
+        if t % self.config.target_update_freq == 0:
             self.agent.synchronize_networks()
 
-        if t % config.saving_freq == 0:
+        if t % self.config.saving_freq == 0 and self.config.save_parameters:
             self.save_parameters()
 
         return loss_eval, grad_eval
@@ -135,7 +158,7 @@ class Trainer:
             r_batch,
             sp_batch,
             done_mask_batch,
-        ) = self.replay_buffer.sample(config.batch_size)
+        ) = self.replay_buffer.sample(self.config.batch_size)
 
         s_batch = torch.tensor(s_batch, dtype=torch.uint8, device=self.device)
         a_batch = torch.tensor(a_batch, dtype=torch.uint8, device=self.device)
@@ -158,7 +181,7 @@ class Trainer:
         )
         loss.backward()
         total_norm = torch.nn.utils.clip_grad_norm_(
-            self.agent.parameters(), config.clip_val
+            self.agent.parameters(), self.config.clip_val
         )
         self.optimizer.step()
 
@@ -175,7 +198,7 @@ class Trainer:
         q_target = (
             rewards
             + (~done_mask)
-            * config.gamma
+            * self.config.gamma
             * torch.max(target_q_values, dim=1).values  # todo done_mask -1?
         )
         q_current = q_values[range(len(q_values)), actions.type(torch.LongTensor)]
@@ -184,13 +207,13 @@ class Trainer:
     def evaluate(self, env=None, num_episodes=None) -> float:
         if num_episodes is None:
             self.logger.info("Evaluating...")
-            num_episodes = config.num_episodes_test
+            num_episodes = self.config.num_episodes_test
 
         if env is None:
             env = self.env
 
         evaluation_replay_buffer = ReplayBuffer(
-            config.buffer_size, config.history_length
+            self.config.buffer_size, self.config.history_length
         )
         rewards = []
 
@@ -200,7 +223,7 @@ class Trainer:
                 index = evaluation_replay_buffer.store_frame(state)
                 q_input = evaluation_replay_buffer.encode_recent_observation()
 
-                action = self.agent.get_action(q_input, config.soft_epsilon)
+                action = self.agent.get_action(q_input, self.config.soft_epsilon)
 
                 state, reward, done, info = env.step(action)
                 evaluation_replay_buffer.store_effect(index, action, reward, done)
@@ -224,11 +247,13 @@ class Trainer:
 
     def record(self) -> None:
         self.logger.info("Recording...")
-        env = make_evaluation_env(config.env_name)
+        env = make_evaluation_env(
+            self.env_name, self.config, record_path=self.record_path
+        )
         self.evaluate(env, 1)
 
     def save_parameters(self) -> None:
         torch.save(
             self.agent.state_dict(),
-            config.model_output,
+            self.model_output,
         )
