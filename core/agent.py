@@ -61,9 +61,9 @@ class Agent:
         if np.random.random() < epsilon:
             return self.env.action_space.sample()
         else:
-            return self.get_best_action_and_q_values(state)[0]
+            return self.get_best_action(state)
 
-    def get_best_action_and_q_values(self, state: Tensor) -> Tuple[int, np.ndarray]:
+    def get_best_action(self, state: Tensor) -> int:
         with torch.no_grad():
             state = torch.tensor(
                 state, dtype=torch.uint8, device=self.device
@@ -72,7 +72,7 @@ class Agent:
                 self.q_network(state).squeeze().to("cpu").tolist()
             )
         best_action: int = np.argmax(action_values)
-        return best_action, action_values
+        return best_action
 
     def state_dict(self) -> Tensor:
         return self.q_network.state_dict()

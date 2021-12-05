@@ -80,13 +80,7 @@ class Trainer:
                 frame_index = self.replay_buffer.store_frame(state)
                 dqn_input = self.replay_buffer.encode_recent_observation()
 
-                best_action, q_values = self.agent.get_best_action_and_q_values(
-                    dqn_input
-                )
                 action = self.agent.get_action(dqn_input, self.exp_schedule.epsilon)
-
-                self.metrics.max_q_values.append(max(q_values))
-                self.metrics.q_values_deque += list(q_values)
 
                 state, reward, done, info = self.env.step(action)
                 self.replay_buffer.store_effect(frame_index, action, reward, done)
@@ -171,6 +165,11 @@ class Trainer:
         self.optimizer.zero_grad()
 
         q_values = self.agent.get_q_values(s_batch, NetworkType.Q_NETWORK)
+
+        q_values_list = q_values.squeeze().to("cpu").tolist()
+        self.metrics.max_q_values.append(max(q_values_list))
+        self.metrics.q_values_deque += list(q_values_list)
+
         with torch.no_grad():
             target_q_values = self.agent.get_q_values(
                 sp_batch, NetworkType.TARGET_NETWORK
