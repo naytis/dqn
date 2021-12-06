@@ -7,13 +7,15 @@ from config import NatureConfig, DefaultConfig, TestConfig
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-e" "--env",
+        "-e",
+        "--env",
         default=NatureConfig.default_env,
         help="Name of the environment, default=" + NatureConfig.default_env,
         choices=NatureConfig.available_envs,
     )
     parser.add_argument(
-        "-c" "--config",
+        "-c",
+        "--config",
         default="default",
         help="Config and hyperparameters of the training model",
         choices=("default", "nature", "test"),
@@ -28,7 +30,7 @@ if __name__ == "__main__":
         config = TestConfig()
 
     trainer = Trainer(
-        env_name=args.env,
+        env_name=args.env + config.env_version,
         config=config,
     )
     trainer.run()

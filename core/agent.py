@@ -26,9 +26,9 @@ class Agent:
         self.target_network = None
         self.env = env
         self.device = device
-        self.build_networks(config)
+        self._build_networks(config)
 
-    def build_networks(self, config) -> None:
+    def _build_networks(self, config) -> None:
         state_shape = list(self.env.observation_space.shape)
         num_actions = self.env.action_space.n
 
@@ -61,9 +61,9 @@ class Agent:
         if np.random.random() < epsilon:
             return self.env.action_space.sample()
         else:
-            return self.get_best_action(state)
+            return self._get_best_action(state)
 
-    def get_best_action(self, state: Tensor) -> int:
+    def _get_best_action(self, state: Tensor) -> int:
         with torch.no_grad():
             state = torch.tensor(
                 state, dtype=torch.uint8, device=self.device
@@ -74,10 +74,10 @@ class Agent:
         best_action: int = np.argmax(action_values)
         return best_action
 
-    def state_dict(self) -> Tensor:
+    def state_dict(self) -> Dict:
         return self.q_network.state_dict()
 
-    def parameters(self) -> Dict:
+    def parameters(self) -> Tensor:
         return self.q_network.parameters()
 
     def synchronize_networks(self) -> None:

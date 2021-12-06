@@ -27,7 +27,7 @@ class Trainer:
             os.makedirs(output_path)
 
         self.env_name = env_name
-        self.env = make_env(env_name, config)
+        self.env = make_env(env_name)
         self.config = config
         self.logger = get_logger(log_path)
         self.metrics = Metrics(
@@ -67,7 +67,7 @@ class Trainer:
 
     def train(self) -> None:
         t = last_eval = last_record = 0
-        self.metrics.eval_reward = self.evaluate()
+        self.metrics.avg_eval_reward = self.evaluate()
 
         while t < self.config.num_steps_train:
             state = self.env.reset()
@@ -85,7 +85,7 @@ class Trainer:
                 state, reward, done, info = self.env.step(action)
                 self.replay_buffer.store_effect(frame_index, action, reward, done)
 
-                self.metrics.loss_eval, self.metrics.grad_eval = self.train_step(t)
+                self.metrics.loss, self.metrics.grad_norm = self.train_step(t)
 
                 if (
                     t > self.config.learning_start
@@ -94,7 +94,7 @@ class Trainer:
                     self.exp_schedule.update_epsilon(t)
 
                 if done:  # or t >= config.num_steps_train: # todo
-                    episode_reward = self.env.get_episode_rewards()
+                    self.metrics.rewards.append(self.env.get_episode_rewards())
                     self.metrics.episode_length.append(self.env.get_episode_lengths())
                     self.metrics.episodes_counter += 1
 
@@ -112,11 +112,9 @@ class Trainer:
                         self.metrics.reset_bar()
                     break
 
-            self.metrics.rewards.append(episode_reward)
-
             if t > self.config.learning_start and last_eval > self.config.eval_freq:
                 last_eval = 0
-                self.metrics.eval_reward = self.evaluate()
+                self.metrics.avg_eval_reward = self.evaluate()
 
             if (
                 t > self.config.learning_start
@@ -198,7 +196,7 @@ class Trainer:
             rewards
             + (~done_mask)
             * self.config.gamma
-            * torch.max(target_q_values, dim=1).values  # todo done_mask -1?
+            * torch.max(target_q_values, dim=1).values
         )
         q_current = q_values[range(len(q_values)), actions.type(torch.LongTensor)]
         return functional.F.huber_loss(q_target, q_current)
@@ -246,9 +244,7 @@ class Trainer:
 
     def record(self) -> None:
         self.logger.info("Recording...")
-        env = make_evaluation_env(
-            self.env_name, self.config, record_path=self.record_path
-        )
+        env = make_evaluation_env(self.env_name, record_path=self.record_path)
         self.evaluate(env, 1)
 
     def save_parameters(self) -> None:

@@ -2,18 +2,6 @@ import numpy as np
 import random
 
 
-def sample_n_unique(sampling_f, n):
-    """Helper function. Given a function `sampling_f` that returns
-    comparable objects, sample n such unique objects.
-    """
-    res = []
-    while len(res) < n:
-        candidate = sampling_f()
-        if candidate not in res:
-            res.append(candidate)
-    return res
-
-
 class ReplayBuffer(object):
     """
     Taken from Berkeley's Assignment
@@ -109,10 +97,21 @@ class ReplayBuffer(object):
             Array of shape (batch_size,) and dtype np.float32
         """
         assert self.can_sample(batch_size)
-        idxes = sample_n_unique(
+        idxes = self._sample_n_unique(
             lambda: random.randint(0, self.num_in_buffer - 2), batch_size
         )
         return self._encode_sample(idxes)
+
+    def _sample_n_unique(self, sampling_f, n):
+        """Given a function `sampling_f` that returns
+        comparable objects, sample n such unique objects.
+        """
+        res = []
+        while len(res) < n:
+            candidate = sampling_f()
+            if candidate not in res:
+                res.append(candidate)
+        return res
 
     def encode_recent_observation(self):
         """Return the most recent `history_length` frames.
@@ -186,12 +185,12 @@ class ReplayBuffer(object):
         return ret
 
     def store_effect(self, idx, action, reward, done):
-        """Store effects of action taken after obeserving frame stored
+        """Store effects of action taken after observing frame stored
         at index idx. The reason `store_frame` and `store_effect` is broken
         up into two functions is so that once can call `encode_recent_observation`
         in between.
 
-        Paramters
+        Parameters
         ---------
         idx: int
             Index in buffer of recently observed frame (returned by `store_frame`).

@@ -1,19 +1,20 @@
 class NatureConfig(object):
-    default_env = "Pong-v0"
+    default_env = "Pong"
     available_envs = (
-        "Pong-v0",
-        "Breakout-v0",
-        "Boxing-v0",
-        "RoadRunner-v0",
-        "Enduro-v0",
-        "DemonAttack-v0",
-        "Assault-v0",
+        "Pong",
+        "Breakout",
+        "Boxing",
+        "RoadRunner",
+        "Enduro",
+        "DemonAttack",
+        "Assault",
     )
+    env_version = "NoFrameskip-v4"
     record = True
     save_parameters = True
 
     # model and training config
-    num_episodes_test = 50
+    num_episodes_test = 30
     clip_val = 10
     saving_freq = 500000
     eval_freq = 250000
@@ -21,7 +22,7 @@ class NatureConfig(object):
     soft_epsilon = 0.05
 
     # hyper params
-    num_steps_train = 6000000
+    num_steps_train = 10000000
     batch_size = 32
     buffer_size = 1000000
     history_length = 4
@@ -37,11 +38,13 @@ class NatureConfig(object):
 
 
 class DefaultConfig(NatureConfig):
-    num_steps_train = 5000000
-    buffer_size = 100000
+    num_steps_train = 4000000
+    buffer_size = 10000
     target_update_freq = 1000
+    soft_epsilon = 0.01
+    epsilon_final = 0.02
     epsilon_interp_limit = 500000
-    learning_start = 100000
+    learning_start = 10000
 
 
 class TestConfig(NatureConfig):
@@ -49,14 +52,14 @@ class TestConfig(NatureConfig):
     save_parameters = False
 
     # model and training config
-    num_episodes_test = 30
     eval_freq = 10000
-    soft_epsilon = 0.05
+    soft_epsilon = 0.01
 
     # hyper params
     num_steps_train = 400000
     batch_size = 32
     buffer_size = 10000
     target_update_freq = 1000
+    epsilon_final = 0.01
     epsilon_interp_limit = 150000
     learning_start = 10000
