@@ -1,5 +1,5 @@
-import time
 import sys
+import time
 from typing import List
 
 import numpy as np

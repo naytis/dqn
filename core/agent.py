@@ -1,5 +1,6 @@
 import enum
-from typing import Tuple, Dict, Union
+from pathlib import Path
+from typing import Dict, Union
 
 import gym
 import numpy as np
@@ -73,6 +74,9 @@ class Agent:
             )
         best_action: int = np.argmax(action_values)
         return best_action
+
+    def load_state_dict(self, parameters_path: Union[Path, str]):
+        self.q_network.load_state_dict(torch.load(parameters_path, map_location="cpu"))
 
     def state_dict(self) -> Dict:
         return self.q_network.state_dict()

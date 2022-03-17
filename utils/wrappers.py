@@ -1,9 +1,8 @@
 from typing import Union
 
 import cv2
-import numpy as np
 import gym
-from gym import spaces
+import numpy as np
 
 from utils.benchmark_monitor import BenchmarkMonitor
 
@@ -104,7 +103,7 @@ class WarpFrame(gym.ObservationWrapper):
         gym.ObservationWrapper.__init__(self, env)
         self.width = 84
         self.height = 84
-        self.observation_space = spaces.Box(
+        self.observation_space = gym.spaces.Box(
             low=0,
             high=255,
             shape=(self.height, self.width, 1),
